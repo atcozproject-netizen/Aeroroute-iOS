@@ -38,6 +38,17 @@ func _draw() -> void:
 		if hub_pos.x < 10.0 or hub_pos.x > size.x - 10.0 or hub_pos.y < 177.0 or hub_pos.y > size.y - 170.0:
 			continue
 		draw_arc(hub_pos, 8.0 + 3.0 * pulse, 0.0, TAU, 24, Color(0.98, 0.75, 0.48, 0.12 + 0.16 * pulse), 1.4, true)
+	# Active market events appear as temporary, gentle halos over their airports.
+	for event in game.route_events:
+		if int(event.get("ends", 0)) <= game.day:
+			continue
+		var point: Dictionary = game.airport(str(event.get("airport", "")))
+		if point.is_empty():
+			continue
+		var event_pos: Vector2 = map_view.project(float(point["lon"]), float(point["lat"]))
+		if event_pos.x < 0.0 or event_pos.x > size.x or event_pos.y < 168.0 or event_pos.y > size.y - 170.0:
+			continue
+		draw_arc(event_pos, 11.0 + pulse * 7.0, 0.0, TAU, 28, Color(0.99, 0.68, 0.35, 0.14 + pulse * 0.15), 2.1, true)
 	for route in game.routes:
 		var arc: PackedVector2Array = map_view.route_points(str(route["from"]), str(route["to"]))
 		if arc.size() < 2:
@@ -53,29 +64,72 @@ func _draw() -> void:
 			direction = -direction
 		if pos.x < -15.0 or pos.x > size.x + 15.0 or pos.y < -15.0 or pos.y > size.y + 15.0:
 			continue
+		draw_flight_trail(arc, t, 1 if int(route.get("direction", 0)) == 0 else -1)
 		draw_airplane(pos, direction, route)
 
+func point_on_route(arc: PackedVector2Array, fraction: float) -> Vector2:
+	var t: float = clampf(fraction, 0.0, 1.0)
+	var idx: int = clampi(int(t * float(arc.size() - 1)), 0, arc.size() - 2)
+	var blend: float = t * float(arc.size() - 1) - float(idx)
+	return arc[idx].lerp(arc[idx + 1], blend)
+
+func draw_flight_trail(arc: PackedVector2Array, progress: float, travel_sign: int) -> void:
+	# Seven short interpolation samples, independent of airport label density.
+	# The tail follows the actual plane and never redraws the static coastline.
+	if arc.size() < 2:
+		return
+	var tail: PackedVector2Array = PackedVector2Array()
+	for j in range(7, -1, -1):
+		var sample_t: float = clampf(progress - float(travel_sign) * 0.006 * float(j), 0.0, 1.0)
+		tail.append(point_on_route(arc, sample_t))
+	if tail.size() > 1:
+		draw_polyline(tail, Color(1.0, 0.97, 0.87, 0.13), 4.0, true)
+		draw_polyline(tail, Color(1.0, 0.96, 0.87, 0.42), 1.25, true)
+
 func draw_airplane(pos: Vector2, heading: Vector2, route: Dictionary) -> void:
-	# Small crisp swept-wing silhouette, no bitmap/pixel upscaling.
-	var geometry := PackedVector2Array([
-		Vector2(11, 0), Vector2(3.5, -1.8), Vector2(-2.2, -8.5),
-		Vector2(-4.5, -8.5), Vector2(-3.0, -1.9), Vector2(-9.0, -1.3),
-		Vector2(-11.0, -4.0), Vector2(-12.4, -3.9), Vector2(-11.5, 0),
-		Vector2(-12.4, 3.9), Vector2(-11.0, 4.0), Vector2(-9.0, 1.3),
-		Vector2(-3.0, 1.9), Vector2(-4.5, 8.5), Vector2(-2.2, 8.5), Vector2(3.5, 1.8)
-	])
-	var outline: PackedVector2Array = PackedVector2Array()
-	var body: PackedVector2Array = PackedVector2Array()
+	# The actual aircraft model determines its silhouette.
+	# Small aircraft are prop planes, large aircraft have a swept-wing jet shape.
+	var model: Dictionary = game.catalog_by_id.get(str(route.get("plane", "")), {})
+	var is_prop: bool = int(model.get("level", 1)) <= 2
 	var angle: float = heading.angle()
+	var size_factor: float = 0.79 if is_prop else 0.83
+	var geometry: PackedVector2Array
+	if is_prop:
+		geometry = PackedVector2Array([
+			Vector2(10.2, 0),Vector2(3.0, -1.0),Vector2(-0.6, -10.4),
+			Vector2(-2.5, -10.4),Vector2(-2.4, -2.0),Vector2(-8.8, -1.0),
+			Vector2(-10.2, -4.1),Vector2(-11.4, -4.1),Vector2(-10.8, 0),
+			Vector2(-11.4, 4.1),Vector2(-10.2, 4.1),Vector2(-8.8, 1.0),
+			Vector2(-2.4, 2.0),Vector2(-2.5, 10.4),Vector2(-0.6, 10.4),
+			Vector2(3.0, 1.0)])
+	else:
+		geometry = PackedVector2Array([
+			Vector2(13.0,0.0),Vector2(4.0,-1.6),Vector2(-2.6,-10.3),
+			Vector2(-4.7,-10.3),Vector2(-3.2,-2.4),Vector2(-9.3,-1.2),
+			Vector2(-10.3,-4.2),Vector2(-11.9,-4.1),Vector2(-11.5,0),
+			Vector2(-11.9,4.1),Vector2(-10.3,4.2),Vector2(-9.3,1.2),
+			Vector2(-3.2,2.4),Vector2(-4.7,10.3),Vector2(-2.6,10.3),
+			Vector2(4.0,1.6)])
+	var outer: PackedVector2Array = PackedVector2Array()
+	var fill: PackedVector2Array = PackedVector2Array()
 	for pt in geometry:
-		body.append(pos + pt.rotated(angle) * 0.72)
-		outline.append(pos + pt.rotated(angle) * 0.80)
-	# Low-cost jet wake and navigation lights; no particle systems.
-	var aft: Vector2 = pos - heading * 8.0
-	draw_line(aft - heading * 8.0, aft, Color(1.0, 1.0, 1.0, 0.17), 2.0, true)
-	draw_colored_polygon(outline, Color("fff9e9"))
-	draw_colored_polygon(body, Color("285767"))
-	draw_circle(pos + Vector2(-1.2, -6.0).rotated(angle) * 0.72, 1.35, Color("e68d7a"))
-	draw_circle(pos + Vector2(-1.2, 6.0).rotated(angle) * 0.72, 1.35, Color("83c4ad"))
-	if int(route.get("level", 1)) >= 4:
-		draw_circle(aft, 1.4, Color(1.0, 0.81, 0.60, 0.75))
+		fill.append(pos + pt.rotated(angle) * size_factor)
+		outer.append(pos + pt.rotated(angle) * (size_factor + 0.065))
+	# Aviation-style halo, subtly scaled so it stays crisp when zooming.
+	draw_circle(pos, 14.0 if not is_prop else 12.0, Color(1.0, 0.96, 0.78, 0.08))
+	draw_colored_polygon(outer, Color(1.0, 0.99, 0.93, 0.96))
+	draw_colored_polygon(fill, Color("244e5c"))
+	var wing_extent: float = 10.4 if is_prop else 10.3
+	var wing_left: Vector2 = pos + Vector2(-1.0, -wing_extent).rotated(angle) * size_factor
+	var wing_right: Vector2 = pos + Vector2(-1.0, wing_extent).rotated(angle) * size_factor
+	draw_circle(wing_left, 1.35, Color("ec8878"))
+	draw_circle(wing_right, 1.35, Color("8dd2b4"))
+	if is_prop:
+		# Rotating two-blade propeller is visible up close but uses no sprites.
+		var tip: Vector2 = pos + heading * 9.3
+		var prop_axis: Vector2 = Vector2(-sin(angle), cos(angle))
+		var speed_wobble: float = sin(ambient_time * 32.0)
+		draw_line(tip + prop_axis * (2.0 + speed_wobble), tip - prop_axis * (2.0 + speed_wobble), Color(1.0, 1.0, 1.0, 0.72), 1.2, true)
+	else:
+		var aft: Vector2 = pos - heading * 9.0
+		draw_circle(aft, 1.6, Color(1.0, 0.78, 0.52, 0.72))
