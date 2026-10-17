@@ -1,0 +1,84 @@
+name: Build and publish Aeroroute (Godot)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "project.godot"
+      - "export_presets.cfg"
+      - "scripts/**"
+      - "scenes/**"
+      - "data/**"
+      - "tools/**"
+      - "tests/**"
+      - ".github/workflows/godot-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: aeroroute-pages
+  cancel-in-progress: true
+
+jobs:
+  web-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout Godot game
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate game data
+        run: |
+          python tests/validate_data.py
+          if [ -f tests/validate_v09_static.py ]; then
+            python tests/validate_v09_static.py
+          fi
+          if [ -f tools/build_firs.py ]; then
+            python tools/build_firs.py
+          fi
+
+      - name: Cache Godot engine and Web templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            .godot-build-cache
+            ~/.local/share/godot/export_templates/4.5.1.stable
+          key: godot-4.5.1-singlethread-web-v2
+
+      - name: Compile actual Godot game
+        run: python tools/build_web.py
+
+      - name: Adapt mobile webpage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('build/index.html')
+          html=p.read_text()
+          html=html.replace('width=device-width, user-scalable=no, initial-scale=1.0',
+                            'width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no')
+          p.write_text(html)
+          PY
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload playable Godot build
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
