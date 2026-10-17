@@ -4,6 +4,7 @@ extends Control
 const StateScript = preload("res://scripts/GameState.gd")
 const MapScript = preload("res://scripts/WorldMap.gd")
 const FlightScript = preload("res://scripts/FlightLayer.gd")
+const FirScript = preload("res://scripts/FirLayer.gd")
 const PAPER = Color("fffdf5")
 const INK = Color("254853")
 const MUTED = Color("7f9a9d")
@@ -14,6 +15,8 @@ const GOLD = Color("e9b68e")
 var game = StateScript.new()
 var world_map
 var flight_layer
+var fir_layer
+var fir_button: Button
 var hud: PanelContainer
 var hud_balance: Label
 var hud_routes: Label
@@ -149,6 +152,19 @@ func create_scene() -> void:
 	world_map.configure(game)
 	world_map.airport_tapped.connect(_airport_tapped)
 	world_map.route_drafted.connect(_draft_route)
+	fir_layer = FirScript.new()
+	fir_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fir_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(fir_layer)
+	fir_layer.configure(world_map)
+	fir_layer.fir_load_failed.connect(func(message: String) -> void:
+		if fir_button != null:
+			fir_button.button_pressed = false
+		toast(message)
+	)
+	fir_layer.fir_loaded.connect(func(count: int) -> void:
+		toast("FIR-gränser klara: %d" % count)
+	)
 	flight_layer = FlightScript.new()
 	flight_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	flight_layer.setup(game, world_map)
@@ -182,7 +198,10 @@ func create_scene() -> void:
 	center_btn.custom_minimum_size = Vector2(53, 43)
 	center_btn.tooltip_text = "Visa huvudflygplatsen"
 	brand_row.add_child(center_btn)
-	center_btn.pressed.connect(func() -> void: world_map.center_on(game.home))
+	center_btn.pressed.connect(func() -> void:
+		world_map.reset_gesture()
+		world_map.center_on(game.home)
+	)
 	hud = add_styled_panel(Color("fffdf7"), 17)
 	top.add_child(hud)
 	var stats: HBoxContainer = row(7)
@@ -233,6 +252,17 @@ func create_scene() -> void:
 	region_btn.add_theme_font_size_override("font_size", 11)
 	zoom_buttons.add_child(region_btn)
 	region_btn.pressed.connect(func() -> void: world_map.whole_world())
+	fir_button = button("FIR", false)
+	fir_button.custom_minimum_size = Vector2(48, 42)
+	fir_button.toggle_mode = true
+	fir_button.button_pressed = false
+	fir_button.tooltip_text = "Visa FIR-gränser på kartan (speldata)"
+	zoom_buttons.add_child(fir_button)
+	fir_button.toggled.connect(func(active: bool) -> void:
+		fir_layer.set_fir_visible(active)
+		if active and not fir_layer.loaded:
+			toast("Laddar FIR-gränser ...")
+	)
 
 	var bottom_controls: PanelContainer = add_styled_panel(Color("fffcf4"), 16)
 	bottom_controls.anchor_left = 0.0
@@ -319,6 +349,21 @@ func create_scene() -> void:
 	active_toast.visible = false
 	add_child(active_toast)
 
+func map_gesture_active() -> bool:
+	return active_tab == "map" and game.initialized and not (
+		(start_overlay != null and is_instance_valid(start_overlay) and start_overlay.visible)
+		or shade.visible or sheet.visible
+	)
+
+func map_can_interact(pos: Vector2) -> bool:
+	if not map_gesture_active():
+		return false
+	if pos.y < 184.0 or pos.y > size.y - 156.0:
+		return false
+	if pos.x > size.x - 88.0 and pos.y >= 207.0 and pos.y <= 465.0:
+		return false
+	return true
+
 func clear_children(node: Node) -> void:
 	for child in node.get_children():
 		node.remove_child(child)
@@ -340,6 +385,7 @@ func heading(eyebrow: String, title: String, sub: String = "") -> void:
 	close.pressed.connect(close_sheet)
 
 func open_sheet(sheet_type: String) -> void:
+	world_map.reset_gesture()
 	current_sheet = sheet_type
 	shade.visible = true
 	sheet.visible = true
@@ -555,6 +601,7 @@ func _clear_content() -> void:
 	clear_children(content_body)
 
 func show_tab(tab: String) -> void:
+	world_map.reset_gesture()
 	if not game.initialized:
 		return
 	active_tab = tab

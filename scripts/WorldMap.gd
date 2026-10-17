@@ -328,55 +328,110 @@ func handle_release(pos: Vector2) -> void:
 	pointer_from = ""
 	queue_redraw()
 
-func _gui_input(event: InputEvent) -> void:
-	# Touch and synthetic mouse events can both arrive in iPhone Safari.
-	# Never process one gesture twice. Two-finger movement is exclusive to pinch navigation.
+var gesture_captured: bool = false
+var last_touch_event_ms: int = 0
+var touch_was_pinch: bool = false
+
+func reset_gesture() -> void:
+	pointers.clear()
+	touch_was_pinch = false
+	pointer_down = false
+	pointer_from = ""
+	pointer_moved = false
+	pinch_active = false
+	pinch_length = 0.0
+	gesture_captured = false
+	queue_redraw()
+
+func _process(_delta: float) -> void:
+	if gesture_captured and Time.get_ticks_msec() - last_touch_event_ms > 8500:
+		reset_gesture()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		reset_gesture()
+
+func _can_capture_touch(pos: Vector2) -> bool:
+	if game == null or not game.initialized:
+		return false
+	var node: Node = get_parent()
+	if node != null and node.has_method("map_can_interact"):
+		return bool(node.map_can_interact(pos))
+	return true
+
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventScreenTouch or event is InputEventScreenDrag):
+		return
+	if gesture_captured:
+		var owner_node: Node = get_parent()
+		if owner_node != null and owner_node.has_method("map_gesture_active"):
+			if not bool(owner_node.map_gesture_active()):
+				reset_gesture()
+				return
+	touch_input_seen = true
+	touch_last_ms = Time.get_ticks_msec()
+	last_touch_event_ms = touch_last_ms
 	if event is InputEventScreenTouch:
-		touch_input_seen = true
-		touch_last_ms = Time.get_ticks_msec()
 		if event.pressed:
+			if gesture_captured and pointers.has(event.index):
+				reset_gesture()
+			if not gesture_captured:
+				if not _can_capture_touch(event.position):
+					return
+				reset_gesture()
+				gesture_captured = true
+			if pointers.size() > 0 and not _can_capture_touch(event.position):
+				return
 			pointers[event.index] = event.position
-			if pointers.size() == 1 and not pinch_active:
+			if pointers.size() == 1:
 				handle_press(event.position)
-			elif pointers.size() >= 2:
+			else:
 				pinch_active = true
+				touch_was_pinch = true
 				pointer_down = false
 				pointer_from = ""
-				route_origin = "" if not game.initialized else route_origin
-				var ps: Array = pointers.values()
-				pinch_length = ps[0].distance_to(ps[1])
-				pinch_center = (ps[0] + ps[1]) * 0.5
+				var positions: Array = pointers.values()
+				pinch_length = positions[0].distance_to(positions[1])
+				pinch_center = (positions[0] + positions[1]) * 0.5
 		else:
-			if pointers.size() == 1 and not pinch_active:
-				handle_release(event.position)
+			if not gesture_captured or not pointers.has(event.index):
+				return
+			var last_finger: bool = pointers.size() == 1
 			pointers.erase(event.index)
+			if last_finger and not pinch_active and not touch_was_pinch:
+				handle_release(event.position)
 			if pointers.is_empty():
+				reset_gesture()
+			elif pointers.size() == 1:
 				pinch_active = false
 				pinch_length = 0.0
-				pointer_down = false
-	elif event is InputEventScreenDrag:
-		touch_input_seen = true
-		touch_last_ms = Time.get_ticks_msec()
-		if not pointers.has(event.index):
+				var remaining: Vector2 = pointers.values()[0]
+				handle_press(remaining)
+				pointer_from = ""
+				pointer_moved = true
+	else:
+		if not gesture_captured or not pointers.has(event.index):
 			return
 		pointers[event.index] = event.position
 		if pointers.size() >= 2:
-			if not pinch_active:
-				pinch_active = true
-				pointer_down = false
-			var ps: Array = pointers.values()
-			var c: Vector2 = (ps[0] + ps[1]) * 0.5
-			var length_now: float = ps[0].distance_to(ps[1])
-			if pinch_length > 10.0 and length_now > 10.0:
-				pan(c - pinch_center)
-				change_zoom(length_now / pinch_length, c)
+			var positions: Array = pointers.values()
+			var center: Vector2 = (positions[0] + positions[1]) * 0.5
+			var length_now: float = positions[0].distance_to(positions[1])
+			if pinch_active and pinch_length > 10.0 and length_now > 10.0:
+				pan(center - pinch_center)
+				change_zoom(length_now / pinch_length, center)
+			pinch_active = true
+			touch_was_pinch = true
 			pinch_length = length_now
-			pinch_center = c
-		elif not pinch_active:
+			pinch_center = center
+		else:
 			handle_motion(event.position)
-	elif event is InputEventMouseButton:
-		# Some mobile browsers produce emulated mouse events up to ~1s after a touch.
-		if touch_input_seen and Time.get_ticks_msec() - touch_last_ms < 1300:
+	get_viewport().set_input_as_handled()
+
+func _gui_input(event: InputEvent) -> void:
+	# Touch was processed by _input, and must never be handled again here.
+	if event is InputEventMouseButton:
+		if touch_input_seen and Time.get_ticks_msec() - touch_last_ms < 1900:
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
@@ -388,6 +443,6 @@ func _gui_input(event: InputEvent) -> void:
 		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			change_zoom(0.89, event.position)
 	elif event is InputEventMouseMotion and pointer_down:
-		if touch_input_seen and Time.get_ticks_msec() - touch_last_ms < 1300:
+		if touch_input_seen and Time.get_ticks_msec() - touch_last_ms < 1900:
 			return
 		handle_motion(event.position)
