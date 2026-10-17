@@ -256,5 +256,54 @@ func _run() -> void:
 	if view.current_sheet == "planner" or view.world_map.gesture_captured or not view.world_map.pointers.is_empty():
 		_fail("Pinch release triggered a route or left capture active")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: 2661 ICAO airports, 4K map, route suggestions, FIR, safe touch gestures")
+	# Close-zoom LOD: no minor airports in the overview; they emerge as
+	# users zoom in, and name details are shown only at neighborhood scale.
+	var map: Control = view.world_map
+	var small_airport: Dictionary = view.game.airport("ESSP")
+	map.focused_airport = ""
+	map.camera_lon = float(small_airport["lon"])
+	map.camera_lat = float(small_airport["lat"])
+	map.zoom = 9.0
+	await process_frame
+	var visible_small: bool = false
+	for candidate in map.candidate_airports():
+		if candidate["code"] == "ESSP":
+			visible_small = true
+	if visible_small or map.airport_min_rank() <= 1:
+		_fail("Minor airports must not clutter overview zoom")
+		return
+	map.zoom = 20.0
+	await process_frame
+	visible_small = false
+	for candidate in map.candidate_airports():
+		if candidate["code"] == "ESSP":
+			visible_small = true
+	if not visible_small or map.airport_min_rank() != 1:
+		_fail("Minor airport does not appear at close zoom")
+		return
+	map.zoom = 42.0
+	if not map.airport_label_text(small_airport).contains("Norrköping"):
+		_fail("Close zoom does not reveal real small-airport name")
+		return
+	map.zoom = 9.0
+	for iteration in range(10):
+		map.change_zoom(1.27)
+	if map.zoom < 60.0 or map.zoom > map.MAX_ZOOM:
+		_fail("Zoom-in button does not reach the intended close-up range")
+		return
+	for iteration in range(12):
+		map.change_zoom(0.79)
+	if map.zoom >= 7.0:
+		_fail("Zoom-out cannot return to regional view")
+		return
+	map.focused_airport = "ESSP"
+	map.zoom = 9.0
+	visible_small = false
+	for candidate in map.candidate_airports():
+		if candidate["code"] == "ESSP":
+			visible_small = true
+	if not visible_small:
+		_fail("A searched small airport must remain focused at regional zoom")
+		return
+	print("AEROROUTE GUI SMOKE PASSED: progressive small-airport LOD, 64x zoom, names, FIR, touch, economy")
 	quit(0)
