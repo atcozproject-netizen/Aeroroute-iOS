@@ -40,6 +40,26 @@ func _init() -> void:
 	var land_data = JSON.parse_string(FileAccess.get_file_as_string("res://data/land.json"))
 	if airport_data is Array:
 		airports = airport_data
+	var extra_data: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/airports_extra.json"))
+	if extra_data is Array:
+		var seen_iata: Dictionary = {}
+		for item in airports:
+			if str(item.get("iata", "")) != "":
+				seen_iata[str(item["iata"])] = true
+		var seen_icao: Dictionary = {}
+		for item in airports:
+			seen_icao[str(item["icao"])] = true
+		for item in extra_data:
+			if not (item is Dictionary) or not item.has("icao"):
+				continue
+			var code: String = str(item["icao"])
+			var alias: String = str(item.get("iata", ""))
+			if seen_icao.has(code) or (alias != "" and seen_iata.has(alias)):
+				continue
+			seen_icao[code] = true
+			if alias != "":
+				seen_iata[alias] = true
+			airports.append(item)
 	for a in airports:
 		airports_by_code[str(a["icao"])] = a
 	if plane_data is Array:
@@ -159,6 +179,32 @@ func minimum_plane(a_code: String, b_code: String) -> Dictionary:
 		if float(p["range"]) >= km:
 			return p
 	return {}
+
+func recommended_destinations(from_code: String, limit: int = 4) -> Array:
+	# Offers actual reachable airport markets, not arbitrary generic upgrades.
+	if not airports_by_code.has(from_code):
+		return []
+	var proposals: Array = []
+	for other in airports:
+		var code: String = str(other["icao"])
+		if code == from_code or not get_route(route_key(from_code, code)).is_empty():
+			continue
+		var km: float = kilometers(from_code, code)
+		if km < 80.0 or km > 1100.0 or initial_plane(from_code, code).is_empty():
+			continue
+		if not gates_available(from_code) or not gates_available(code):
+			continue
+		var cost: float = route_cost(from_code, code)
+		if cost <= 0.0:
+			continue
+		var market: Dictionary = demand_market(from_code, code)
+		# Favor demand, affordable openings and manageable short-haul distances.
+		var score: float = float(market["base"]) * 0.38 + float(other["rank"]) * 11.0 - cost * 0.19 - km * 0.011
+		if cost > cash:
+			score -= 30.0
+		proposals.append({"code":code,"km":km,"cost":cost,"demand":market["label"],"score":score})
+	proposals.sort_custom(func(a: Dictionary,b: Dictionary)->bool: return float(a["score"]) > float(b["score"]))
+	return proposals.slice(0, mini(limit, proposals.size()))
 
 func gates_used(icao: String) -> int:
 	var count: int = 0

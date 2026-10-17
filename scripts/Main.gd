@@ -197,6 +197,13 @@ func create_scene() -> void:
 	add_child(profit_layer)
 	profit_layer.setup(game, world_map)
 
+	# Opaque, non-interactive header gives the brand and counters proper readability.
+	var header: ColorRect = ColorRect.new()
+	header.color = Color("e2efe9")
+	header.anchor_right = 1.0
+	header.offset_bottom = 172.0
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(header)
 	var top: VBoxContainer = stack(10)
 	top.anchor_right = 1.0
 	top.offset_left = 16.0
@@ -551,6 +558,19 @@ func show_airport(code: String) -> void:
 			sheet_body.add_child(rt)
 			var id: String = str(r["id"])
 			rt.pressed.connect(func() -> void: show_route(id))
+	var opportunities: Array = game.recommended_destinations(code, 4)
+	if not opportunities.is_empty():
+		sheet_body.add_child(line_break())
+		sheet_body.add_child(label("FÖRSLAG PÅ NYA LINJER", 12, MUTED, true))
+		for idea in opportunities:
+			var to_code: String = str(idea["code"])
+			var cost: float = float(idea["cost"])
+			var advice: String = "%s  ·  %d km  ·  %s" % [to_code, roundi(float(idea["km"])), game.money(cost)]
+			var suggest: Button = button(advice, false)
+			suggest.tooltip_text = "Förväntad efterfrågan: %s" % str(idea["demand"])
+			sheet_body.add_child(suggest)
+			suggest.pressed.connect(func() -> void: show_planner(code, to_code))
+
 
 func show_planner(from: String, to: String) -> void:
 	open_sheet("planner")
@@ -726,6 +746,7 @@ func build_tab() -> void:
 	match active_tab:
 		"routes":
 			content_body.add_child(label("DINA FLYGLINJER", 24, INK, true))
+			content_body.add_child(label("%d flygningar  ·  Senaste resultat: %s" % [game.total_flights, game.money(game.last_profit)], 12, MUTED))
 			content_body.add_child(label("%d linjer · %d flygplatser" % [game.routes.size(), game.owned.size()], 13, MUTED))
 			for r in game.routes:
 				var projection: Dictionary = game.projected(r)

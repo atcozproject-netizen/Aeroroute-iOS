@@ -4,13 +4,13 @@ extends Control
 signal airport_tapped(code: String)
 signal route_drafted(start_code: String, end_code: String)
 
-const SEA_TOP = Color("345967")
-const SEA_BOTTOM = Color("4d7e89")
-const LAND_FILL = Color("f5f0df")
-const LAND_EDGE = Color("cdd8c9")
-const NODE_FREE = Color("234e5c")
-const NODE_OWNED = Color("f1ae77")
-const ROUTE_LINE = Color("efbb8a")
+const SEA_TOP = Color("84b9c3")
+const SEA_BOTTOM = Color("84b9c3")
+const LAND_FILL = Color("e5ebde")
+const LAND_EDGE = Color("c5d6ce")
+const NODE_FREE = Color("37677a")
+const NODE_OWNED = Color("e6a271")
+const ROUTE_LINE = Color("de986d")
 const ROUTE_GLOW = Color(1.0, 0.83, 0.64, 0.29)
 const OWNED_HALO = Color(0.98, 0.75, 0.52, 0.21)
 const LAND_TEXTURE: Texture2D = preload("res://data/world_land.png")
@@ -169,20 +169,11 @@ func world_project_raw(lon: float, lat: float, shift: float = 0.0) -> Vector2:
 	return Vector2(size.x * 0.5 + (lon - camera_lon + shift) * projection_scale(), size.y * 0.5 - (lat - camera_lat) * projection_scale() * 1.17)
 
 func _draw() -> void:
-	var gradient_sections: int = 12
-	for i in range(gradient_sections):
-		var t: float = float(i) / float(gradient_sections - 1)
-		draw_rect(Rect2(0.0, size.y * t, size.x, size.y / float(gradient_sections) + 1.0), SEA_TOP.lerp(SEA_BOTTOM, t), true)
+	# Smooth premium strategy-board palette. No stripes, grids or video-sized shaders.
+	draw_rect(Rect2(Vector2.ZERO,size), SEA_TOP, true)
 	if game == null:
 		return
 	var sc: float = projection_scale()
-	# Play-oriented cartography: no Google-Earth-style coordinate grid.
-	# A quiet navigation sheen gives depth without additional textures or draw-heavy shaders.
-	var sheen: PackedVector2Array = PackedVector2Array()
-	for step in range(13):
-		var x: float = size.x * float(step) / 12.0
-		sheen.append(Vector2(x, size.y * 0.72 + sin(x / maxf(size.x, 1.0) * TAU) * 23.0))
-	draw_polyline(sheen, Color(1.0, 1.0, 1.0, 0.045), 1.0, true)
 
 	# Draw each visible section of a pre-rendered land texture. With this
 	# technique the full continents draw correctly regardless of winding,
@@ -205,12 +196,12 @@ func _draw() -> void:
 		var p: Vector2 = item["position"]
 		var owned: bool = bool(item["owned"])
 		var rank: int = int(item["airport"]["rank"])
-		var radius: float = (4.1 if zoom < 8.0 else 4.6) + (1.2 if owned else 0.0)
+		var radius: float = (3.4 if zoom < 8.0 else 4.2) + (1.0 if owned else 0.0)
 		if owned:
 			draw_circle(p, radius + 6.0, OWNED_HALO)
 		elif rank >= 7 and zoom >= 5.0:
 			draw_circle(p, radius + 3.0, Color(1.0, 1.0, 1.0, 0.14))
-		draw_circle(p, radius + 1.75, Color(1.0, 0.99, 0.94, .96))
+		draw_circle(p, radius + 1.55, Color(0.995, 0.995, 0.98, .96))
 		draw_circle(p, radius, NODE_OWNED if owned else NODE_FREE)
 		if owned and zoom > 7.0:
 			draw_circle(p, 1.5, Color("fff0cf"))
@@ -229,7 +220,7 @@ func _draw() -> void:
 		if not can_draw:
 			continue
 		placed_labels.append(label_bounds)
-		draw_string(ThemeDB.fallback_font, tx, code, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("213c48"))
+		draw_string(ThemeDB.fallback_font, tx, code, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("315764"))
 
 	var origin: String = pointer_from if pointer_down and gesture_kind == "route" and pointer_from != "" else route_origin
 	if origin != "" and game.airports_by_code.has(origin):
@@ -264,7 +255,7 @@ func draw_land_texture(sc: float) -> void:
 			continue
 		var src_x: float = (view_left - left) / world_w * tex_size.x
 		var src_w: float = (view_right - view_left) / world_w * tex_size.x
-		draw_texture_rect_region(LAND_TEXTURE, Rect2(view_left, visible_top, view_right-view_left, visible_bottom-visible_top), Rect2(src_x, src_y, src_w, src_h), Color("e1dfc9"), false, true)
+		draw_texture_rect_region(LAND_TEXTURE, Rect2(view_left, visible_top, view_right-view_left, visible_bottom-visible_top), Rect2(src_x, src_y, src_w, src_h), Color.WHITE, false, true)
 
 
 func route_points(a_code: String, b_code: String) -> PackedVector2Array:
