@@ -1,0 +1,61 @@
+name: One-time import of Aeroroute Godot sources
+
+on:
+  push:
+    paths: [".github/workflows/seed-source.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  seed-repository:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import original Aeroroute Godot game
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 25 \
+            "https://33345af0-e1e3-4d86-89dd-65017c97357a.sandbox.floot.app/_cdn/static/45ac0f25-3f39-4438-8577-ad98c4193552-aeroroute-v08-final-src.zip" \
+            -o /tmp/aeroroute-source.zip
+          python - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          import shutil,zipfile
+          with TemporaryDirectory() as tmp:
+              with zipfile.ZipFile('/tmp/aeroroute-source.zip') as z:
+                  z.extractall(tmp)
+              root=Path(tmp)/'Aeroroute_Godot_V0_8'
+              assert (root/'project.godot').is_file(), 'Expected Godot source ZIP'
+              for item in root.iterdir():
+                  if item.name in ('build','.godot','.git','.github','tools'):
+                      continue
+                  dest=Path.cwd()/item.name
+                  if dest.exists():
+                      continue
+                  if item.is_dir():
+                      shutil.copytree(item,dest)
+                  else:
+                      shutil.copy2(item,dest)
+          print('Godot game source imported into GitHub workspace')
+          PY
+
+      - name: Commit the complete source permanently
+        run: |
+          git config user.name "Aeroroute Build Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add project.godot export_presets.cfg scenes scripts data tests README.md *.md 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "game: import original Aeroroute Godot source"
+            git push origin HEAD:main
+          fi
+
+      - name: Request first Godot build immediately
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run godot-web.yml --ref main
