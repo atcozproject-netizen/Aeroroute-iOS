@@ -396,5 +396,44 @@ func _run() -> void:
 	if not operational_text.contains("FLYGOPERATIVT") or not operational_text.contains("Nästa landning"):
 		_fail("Live network briefing is missing from routes screen")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: commercial airports, crisp coastline tiles, no progression, living economics, flight trails and ops briefing")
+	# Cockpit V1.1: actual layout and both map-first actions must function,
+	# including continuing to show the player's flying plane.
+	view.show_tab("map")
+	await process_frame
+	var header_height: float = view.hud.get_global_rect().end.y
+	if header_height >= 135.0:
+		_fail("Cockpit dashboard still blocks too much of the map")
+		return
+	if view.route_mode_button.get_parent() == view.zoom_buttons:
+		_fail("Create-line game action is still buried among zoom controls")
+		return
+	if view.route_mode_button.get_global_rect().position.y < view.size.y - 220.0:
+		_fail("Primary game action does not float near the flight dock")
+		return
+	if view.follow_button == null or view.follow_button.disabled:
+		_fail("Flight-follow action not enabled with an active route")
+		return
+	var follow_id: String = view.game.route_key("ESSA", "ESSP")
+	view.follow_button.pressed.emit()
+	await process_frame
+	if view.world_map.follow_route_id != follow_id:
+		_fail("Follow flight button did not activate tracking")
+		return
+	view.world_map._process(0.10)
+	var follow_report: Dictionary = view.game.network_snapshot()
+	if str(follow_report.get("next_route_id", "")) != follow_id:
+		_fail("Flight-follow route does not agree with live next-arrival report")
+		return
+	view.world_map.handle_press(Vector2(185, 305))
+	if view.world_map.follow_route_id != "":
+		_fail("Touching the map failed to stop automatic flight tracking")
+		return
+	view.world_map.reset_gesture()
+	if view.route_mode_button.text.find("LINJE") < 0:
+		_fail("Primary create-route button missing")
+		return
+	if view.game.routes.size() != 1:
+		_fail("Cockpit redesign unexpectedly changed route model")
+		return
+		print("AEROROUTE GUI SMOKE PASSED: cockpit redesign, follow aircraft, safe map input and real airline economics")
 	quit(0)
