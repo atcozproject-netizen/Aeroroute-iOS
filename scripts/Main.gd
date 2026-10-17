@@ -25,7 +25,7 @@ var map_status: Label
 var profit_layer: Control
 var balance_tween: Tween
 var toast_tween: Tween
-var cockpit_background: ColorRect
+var cockpit_background: Control
 var cockpit_top: VBoxContainer
 var clock_dock: PanelContainer
 var quote_card: PanelContainer
@@ -211,19 +211,30 @@ func create_scene() -> void:
 	add_child(profit_layer)
 	profit_layer.setup(game, world_map)
 	# Opaque, non-interactive header gives the brand and counters proper readability.
-	var header: ColorRect = ColorRect.new()
+	var header: PanelContainer = add_styled_panel(Color(0.065, 0.19, 0.23, 0.96), 20)
 	cockpit_background = header
-	header.color = Color("163d4b")
+	var header_style: StyleBoxFlat = header.get_theme_stylebox("panel") as StyleBoxFlat
+	header_style.content_margin_left = 0
+	header_style.content_margin_right = 0
+	header_style.content_margin_top = 0
+	header_style.content_margin_bottom = 0
+	header_style.shadow_color = Color(0.04, 0.17, 0.20, 0.24)
+	header_style.shadow_size = 10
+	header_style.border_width_bottom = 2
+	header_style.border_color = Color("e5b979")
 	header.anchor_right = 1.0
-	header.offset_bottom = 121.0
+	header.offset_left = 8.0
+	header.offset_right = -8.0
+	header.offset_top = 6.0
+	header.offset_bottom = 119.0
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(header)
 	var top: VBoxContainer = stack(6)
 	cockpit_top = top
 	top.anchor_right = 1.0
-	top.offset_left = 11.0
-	top.offset_right = -11.0
-	top.offset_top = 7.0
+	top.offset_left = 19.0
+	top.offset_right = -19.0
+	top.offset_top = 14.0
 	add_child(top)
 	var brand_row: HBoxContainer = row(9)
 	top.add_child(brand_row)
@@ -261,7 +272,7 @@ func create_scene() -> void:
 		world_map.reset_gesture()
 		world_map.center_on(game.home)
 	)
-	hud = add_styled_panel(Color("285c69"), 11)
+	hud = add_styled_panel(Color(0.19, 0.39, 0.43, 0.76), 11)
 	var compact_style: StyleBoxFlat = hud.get_theme_stylebox("panel") as StyleBoxFlat
 	compact_style.content_margin_left = 10
 	compact_style.content_margin_right = 10
@@ -274,7 +285,10 @@ func create_scene() -> void:
 	stats.add_child(build_stat("LINJER", "0", "routes"))
 	stats.add_child(build_stat("PASSAGERARE", "0", "passengers"))
 
-	nav_bar = add_styled_panel(Color("153b49"), 0)
+	nav_bar = add_styled_panel(Color(0.07, 0.19, 0.24, 0.96), 19)
+	var nav_back: StyleBoxFlat = nav_bar.get_theme_stylebox("panel") as StyleBoxFlat
+	nav_back.shadow_color = Color(0.02, 0.15, 0.22, 0.26)
+	nav_back.shadow_size = 9
 	var nav_style: StyleBoxFlat = nav_bar.get_theme_stylebox("panel") as StyleBoxFlat
 	nav_style.content_margin_top = 5
 	nav_style.content_margin_bottom = 5
@@ -333,6 +347,10 @@ func create_scene() -> void:
 		update_map_status()
 	)
 	route_mode_button = button("DRA NY LINJE", true)
+	var route_action_style: StyleBoxFlat = route_mode_button.get_theme_stylebox("normal") as StyleBoxFlat
+	route_action_style.bg_color = Color("e7b574")
+	route_mode_button.add_theme_color_override("font_color", Color("123441"))
+	route_mode_button.add_theme_color_override("font_hover_color", Color("123441"))
 	route_mode_button.toggle_mode = true
 	route_mode_button.anchor_top = 1.0
 	route_mode_button.anchor_bottom = 1.0
@@ -372,7 +390,10 @@ func create_scene() -> void:
 	# FIR is enabled after the HUD and notification labels have been created.
 
 
-	var bottom_controls: PanelContainer = add_styled_panel(Color("1e4c5c"), 15)
+	var bottom_controls: PanelContainer = add_styled_panel(Color(0.08, 0.23, 0.29, 0.96), 16)
+	var dock_back: StyleBoxFlat = bottom_controls.get_theme_stylebox("panel") as StyleBoxFlat
+	dock_back.shadow_color = Color(0.03, 0.15, 0.21, 0.24)
+	dock_back.shadow_size = 7
 	clock_dock = bottom_controls
 	var dock_style: StyleBoxFlat = bottom_controls.get_theme_stylebox("panel") as StyleBoxFlat
 	dock_style.content_margin_top = 6
@@ -408,7 +429,10 @@ func create_scene() -> void:
 		game.save_game()
 	)
 
-	content_view = add_styled_panel(Color("edf6f3"), 0)
+	content_view = add_styled_panel(Color("edf5ef"), 20)
+	var content_style: StyleBoxFlat = content_view.get_theme_stylebox("panel") as StyleBoxFlat
+	content_style.shadow_color = Color(0.03, 0.13, 0.16, 0.23)
+	content_style.shadow_size = 12
 	content_view.anchor_right = 1.0
 	content_view.anchor_bottom = 1.0
 	content_view.offset_bottom = -64.0
@@ -523,19 +547,21 @@ func _layout_for_size(view_size: Vector2) -> void:
 	viewport_layout_mode = "landscape" if landscape else "portrait"
 	var cockpit_width: float = minf(420.0, view_size.x - 6.0) if landscape else view_size.x
 	cockpit_background.anchor_right = 0.0 if landscape else 1.0
-	cockpit_background.offset_right = cockpit_width if landscape else 0.0
-	cockpit_background.offset_bottom = 105.0
+	cockpit_background.offset_left = 8.0
+	cockpit_background.offset_right = cockpit_width - 8.0 if landscape else -8.0
+	cockpit_background.offset_bottom = 118.0
 	cockpit_top.anchor_right = 0.0 if landscape else 1.0
-	cockpit_top.offset_right = cockpit_width - 10.0 if landscape else -11.0
+	cockpit_top.offset_left = 19.0
+	cockpit_top.offset_right = cockpit_width - 19.0 if landscape else -19.0
 	zoom_buttons.offset_top = 113.0 if landscape else 143.0
 	zoom_buttons.offset_left = -52.0 if landscape else -61.0
 	zoom_buttons.offset_right = -8.0 if landscape else -13.0
 	nav_bar.anchor_left = 0.0
 	nav_bar.anchor_right = 0.0 if landscape else 1.0
-	nav_bar.offset_left = 8.0 if landscape else 0.0
-	nav_bar.offset_right = minf(view_size.x * 0.65, 500.0) if landscape else 0.0
-	nav_bar.offset_top = -56.0 if landscape else -61.0
-	nav_bar.offset_bottom = 0.0
+	nav_bar.offset_left = 8.0 if landscape else 10.0
+	nav_bar.offset_right = minf(view_size.x * 0.62, 494.0) if landscape else -10.0
+	nav_bar.offset_top = -64.0 if landscape else -68.0
+	nav_bar.offset_bottom = -8.0
 	if landscape:
 		clock_dock.anchor_left = 1.0
 		clock_dock.anchor_right = 1.0
@@ -583,7 +609,24 @@ func _layout_for_size(view_size: Vector2) -> void:
 			sheet.offset_top = -minf(555.0, view_size.y * 0.73)
 			sheet.offset_bottom = -62.0
 	if content_view != null:
-		content_view.offset_bottom = -58.0 if landscape else -62.0
+		if landscape:
+			content_view.anchor_left = 1.0
+			content_view.anchor_right = 1.0
+			content_view.anchor_top = 0.0
+			content_view.anchor_bottom = 1.0
+			content_view.offset_left = -minf(view_size.x * 0.45, 474.0)
+			content_view.offset_right = -9.0
+			content_view.offset_top = 84.0
+			content_view.offset_bottom = -9.0
+		else:
+			content_view.anchor_left = 0.0
+			content_view.anchor_right = 1.0
+			content_view.anchor_top = 1.0
+			content_view.anchor_bottom = 1.0
+			content_view.offset_left = 9.0
+			content_view.offset_right = -9.0
+			content_view.offset_top = -minf(view_size.y * 0.61, 550.0)
+			content_view.offset_bottom = -76.0
 
 func map_gesture_active() -> bool:
 	return active_tab == "map" and game.initialized and not (
@@ -950,7 +993,8 @@ func show_tab(tab: String) -> void:
 	active_tab = tab
 	close_sheet()
 	content_view.visible = tab != "map"
-	flight_layer.visible = tab == "map"
+	# The living flight map remains active behind partial operations panels.
+	flight_layer.visible = true
 	get_node("ClockDock").visible = tab == "map"
 	zoom_buttons.visible = tab == "map"
 	route_mode_button.visible = tab == "map"
@@ -973,7 +1017,7 @@ func show_tab(tab: String) -> void:
 		nav_button.modulate = Color.WHITE
 		var active: bool = key == tab
 		var nav_style := StyleBoxFlat.new()
-		nav_style.bg_color = Color("e8b877") if active else Color("255967")
+		nav_style.bg_color = Color("e8b877") if active else Color(0.14, 0.33, 0.39, 0.85)
 		nav_style.corner_radius_top_left = 12
 		nav_style.corner_radius_top_right = 12
 		nav_style.corner_radius_bottom_left = 12
