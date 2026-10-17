@@ -76,17 +76,23 @@ func _run() -> void:
 		_fail("Searching for OMDB returned no airport")
 		return
 	var first: Button = options.get_child(0) as Button
-	if first == null or not first.text.begins_with("OMDB"):
+	if first == null or not first.text.contains("OMDB"):
 		_fail("OMDB airport selection missing after search")
 		return
 	_click(first.get_global_rect().get_center())
 	await process_frame
-	if view.start_choice_code != "OMDB":
-		_fail("Tapping OMDB airport option did not select it")
+	if view.start_choice_code != "OMDB" or not first.button_pressed or not view.start_selection_label.text.contains("OMDB"):
+		_fail("Selecting OMDB must persist and visually highlight selected airport")
+		return
+	if view.start_overlay.find_children("*", "ScrollContainer", true, false).size() > 0:
+		_fail("Start modal still contains buggy nested airport scrolling")
+		return
+	if view.start_choices.get_child_count() > 4:
+		_fail("Start modal displays more options than usable on iPhone")
 		return
 	var begin_button: Button = null
 	for candidate in view.start_overlay.find_children("*", "Button", true, false):
-		if candidate is Button and candidate.text == "STARTA NYTT FLYGBOLAG":
+		if candidate is Button and candidate.text.begins_with("STARTA FLYGBOLAG"):
 			begin_button = candidate
 			break
 	if begin_button == null:
@@ -96,6 +102,9 @@ func _run() -> void:
 	await process_frame
 	if not view.game.initialized:
 		_fail("Tapping start company button did not begin game")
+		return
+	if view.game.home != "OMDB" or view.start_overlay != null:
+		_fail("Starting must use the visible selected ICAO and cleanly close onboarding")
 		return
 	if view.profit_layer == null:
 		_fail("Profit effect layer missing")
@@ -215,7 +224,7 @@ func _run() -> void:
 	var destination_airport: Dictionary = {}
 	for a in targets:
 		for b in targets:
-			if a["code"] != b["code"] and a["position"].distance_to(b["position"]) >= 65.0:
+			if a["code"] != b["code"] and a["position"].distance_to(b["position"]) >= 65.0 and not view.game.initial_plane(str(a["code"]), str(b["code"])).is_empty():
 				source_airport = a
 				destination_airport = b
 				break
@@ -250,15 +259,17 @@ func _run() -> void:
 		_fail("Completed normal pan retained stale touch capture")
 		return
 
-	# Long-press for 0.42 sec explicitly arms route dragging.
+	# The Fly Corp-like route gesture needs only a brief hold on the
+	# airport marker; no modal or secondary route selection at all.
+	view.game.cash = 12000.0
 	view.world_map.center_on("OMDB")
 	await process_frame
 	from_pos = view.world_map.project(float(source_airport["airport"]["lon"]), float(source_airport["airport"]["lat"]))
 	to_pos = view.world_map.project(float(destination_airport["airport"]["lon"]), float(destination_airport["airport"]["lat"]))
 	down.position = from_pos
 	root.push_input(down, true)
-	view.world_map._process(0.24)
-	view.world_map._process(0.24)
+	view.world_map._process(0.14)
+	view.world_map._process(0.14)
 	if view.world_map.gesture_kind != "route":
 		_fail("Long press did not arm deliberate route creation")
 		return
@@ -268,9 +279,15 @@ func _run() -> void:
 	up.position = to_pos
 	root.push_input(up, true)
 	await process_frame
-	if view.current_sheet != "planner":
-		_fail("Long-press plus drag did not open route planner")
+	var built_id: String = view.game.route_key(str(source_airport["code"]), str(destination_airport["code"]))
+	if view.game.get_route(built_id).is_empty() or view.current_sheet != "":
+		_fail("Direct drag should immediately open a route without a route picker")
 		return
+	var new_route: Dictionary = view.game.get_route(built_id)
+	if new_route.get("plane", "") == "":
+		_fail("Direct route was created without its automatic aircraft")
+		return
+	view.game.routes.erase(new_route)
 	if view.world_map.gesture_captured or not view.world_map.pointers.is_empty():
 		_fail("Finished long-press drag retained stale touch state")
 		return
@@ -429,7 +446,7 @@ func _run() -> void:
 		_fail("Touching the map failed to stop automatic flight tracking")
 		return
 	view.world_map.reset_gesture()
-	if view.route_mode_button.text != "+ NY LINJE":
+	if view.route_mode_button.text != "DRA NY LINJE":
 		_fail("Primary action failed to reset after leaving route mode")
 		return
 	_click(view.route_mode_button.get_global_rect().get_center())
@@ -549,5 +566,5 @@ func _run() -> void:
 	if str(view.game.get_route(second_id)["plane"]) != str(second_model["id"]) or absf(view.game.cash - (cash_before_plane - swap_cost)) > 0.1:
 		_fail("Plane change affected another route or charged wrong amount")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: simple airport UI, multi-route plane picker, direct route taps, terminal and aircraft costs, cockpit, touch")
+	print("AEROROUTE GUI SMOKE PASSED: stable onboarding selection, no-scroll UI, instant route drawing, aircraft changes, terminal management and touch")
 	quit(0)
