@@ -60,6 +60,9 @@ jobs:
       - name: Compile actual Godot game
         run: python tools/build_web.py
 
+      - name: Verify start-screen search and button hit-testing
+        run: ./.godot-build-cache/Godot_v4.5.1-stable_linux.x86_64 --headless --path . --script tests/gui_interaction_smoke.gd
+
       - name: Adapt mobile webpage
         run: |
           python - <<'PY'

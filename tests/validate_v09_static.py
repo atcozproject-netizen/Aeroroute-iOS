@@ -10,7 +10,7 @@ checks={
  'Reset on app focus loss':'NOTIFICATION_APPLICATION_FOCUS_OUT' in world,
  'Touch stale-event watchdog':'last_touch_event_ms > 8500' in world,
  'Multi-touch cannot start from UI':'pointers.size() > 0 and not _can_capture_touch(event.position)' in world,
- 'Mouse events not emulated':'pointing/emulate_mouse_from_touch=false' in (p/'project.godot').read_text(),
+ 'iPhone taps are delivered to Godot GUI':'pointing/emulate_mouse_from_touch=true' in (p/'project.godot').read_text(),
  'FIR layer passes touches':'MOUSE_FILTER_IGNORE' in main and 'fir_layer' in main,
  'FIR layer toggle':'set_fir_visible(active)' in main,
  'FIR data bundled':'data/fir_regions.json' in fir,
