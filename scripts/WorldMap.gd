@@ -19,6 +19,7 @@ var game
 var camera_lon: float = 13.0
 var camera_lat: float = 52.0
 var zoom: float = 4.4
+var focused_airport: String = ""
 var route_origin: String = ""
 var pointer_start: Vector2 = Vector2.ZERO
 var pointer_last: Vector2 = Vector2.ZERO
@@ -50,7 +51,7 @@ var map_revision: int = 0
 # A static world-map LOD is computed only once, not on every pan frame.
 const LOD_THRESHOLDS = [0.8, 0.55, 0.36, 0.12]
 const MIN_ZOOM: float = 2.7
-const MAX_ZOOM: float = 16.0
+const MAX_ZOOM: float = 64.0
 const PAN_SENSITIVITY: float = 0.70
 const MAX_PAN_STEP_PX: float = 36.0
 
@@ -95,44 +96,69 @@ func land_lod_index() -> int:
 	return 3
 
 func airport_min_rank() -> int:
-	if zoom < 1.55:
-		return 7
-	if zoom < 2.5:
-		return 6
+	# Smooth LOD: local airfields (rank 1) appear only at neighborhood zoom.
 	if zoom < 4.2:
 		return 5
 	if zoom < 6.4:
 		return 4
-	if zoom < 9.0:
+	if zoom < 10.0:
 		return 3
-	if zoom < 12.5:
+	if zoom < 18.0:
 		return 2
 	return 1
 
+func airport_label_text(airport: Dictionary) -> String:
+	var code: String = str(airport.get("icao", ""))
+	if zoom < 17.0:
+		return code
+	var iata: String = str(airport.get("iata", ""))
+	if zoom < 30.0:
+		return code + (" · " + iata if iata != "" else "")
+	var full_name: String = str(airport.get("name", code)).strip_edges()
+	if full_name.length() > 25:
+		full_name = full_name.substr(0, 24).strip_edges() + "…"
+	return code + " · " + full_name
+
 func candidate_airports() -> Array:
+	if game == null:
+		return []
 	var candidates: Array = []
 	var minimum_rank: int = airport_min_rank()
+	var sc: float = maxf(projection_scale(), 0.001)
+	var max_d_lon: float = size.x * 0.5 / sc + 3.0
+	var max_d_lat: float = size.y * 0.5 / (sc * 1.17) + 3.0
+	# Geographic culling BEFORE projecting all 2661 records avoids work
+	# during iPhone pinch/pan at city zoom.
 	for airport in map_airports:
 		var code: String = str(airport["icao"])
 		var owned: bool = game.owned.has(code)
-		if not owned and int(airport["rank"]) < minimum_rank:
+		var focused: bool = code == focused_airport
+		if not owned and not focused and int(airport["rank"]) < minimum_rank:
 			continue
-		var pos: Vector2 = project(float(airport["lon"]), float(airport["lat"]))
+		var lat: float = float(airport["lat"])
+		if absf(lat - camera_lat) > max_d_lat:
+			continue
+		var lon: float = float(airport["lon"])
+		var diff_lon: float = fposmod(lon - camera_lon + 180.0, 360.0) - 180.0
+		if absf(diff_lon) > max_d_lon:
+			continue
+		var pos: Vector2 = project(lon, lat)
 		if pos.x < -30.0 or pos.x > size.x + 30.0 or pos.y < -30.0 or pos.y > size.y + 30.0:
 			continue
-		candidates.append({"code": code, "position": pos, "airport": airport, "owned": owned})
-	# Player-owned airports are always visible, even in dense metro areas.
+		candidates.append({"code":code, "position":pos, "airport":airport, "owned":owned, "focused":focused})
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if bool(a["focused"]) != bool(b["focused"]):
+			return bool(a["focused"])
 		if bool(a["owned"]) != bool(b["owned"]):
 			return bool(a["owned"])
 		return int(a["airport"]["rank"]) > int(b["airport"]["rank"])
 	)
 	var result: Array = []
-	var spacing: float = 28.0 if zoom < 6.5 else 23.0 if zoom < 11.0 else 15.0
+	var spacing: float = 28.0 if zoom < 6.5 else 23.0 if zoom < 12.0 else 17.0 if zoom < 22.0 else 12.0 if zoom < 42.0 else 8.0
 	var spacing_sq: float = spacing * spacing
 	for item in candidates:
 		var collide: bool = false
-		if not bool(item["owned"]):
+		if not bool(item["owned"]) and not bool(item["focused"]):
 			for chosen in result:
 				if item["position"].distance_squared_to(chosen["position"]) < spacing_sq:
 					collide = true
@@ -149,12 +175,14 @@ func center_on(code: String) -> void:
 		return
 	camera_lon = float(a["lon"])
 	camera_lat = clampf(float(a["lat"]), -72.0, 76.0)
+	focused_airport = code
 	zoom = 9.0
 	queue_redraw()
 
 func whole_world() -> void:
 	camera_lon = 12.0
 	camera_lat = 38.0
+	focused_airport = ""
 	zoom = MIN_ZOOM
 	queue_redraw()
 
@@ -196,8 +224,9 @@ func _draw() -> void:
 		var p: Vector2 = item["position"]
 		var owned: bool = bool(item["owned"])
 		var rank: int = int(item["airport"]["rank"])
-		var radius: float = (3.4 if zoom < 8.0 else 4.2) + (1.0 if owned else 0.0)
-		if owned:
+		var focused: bool = bool(item["focused"])
+		var radius: float = (3.2 if zoom < 8.0 else 3.8 if zoom < 24.0 else 4.1) + (1.0 if owned or focused else 0.0)
+		if owned or focused:
 			draw_circle(p, radius + 6.0, OWNED_HALO)
 		elif rank >= 7 and zoom >= 5.0:
 			draw_circle(p, radius + 3.0, Color(1.0, 1.0, 1.0, 0.14))
@@ -205,12 +234,15 @@ func _draw() -> void:
 		draw_circle(p, radius, NODE_OWNED if owned else NODE_FREE)
 		if owned and zoom > 7.0:
 			draw_circle(p, 1.5, Color("fff0cf"))
-		var show_label: bool = owned or (zoom >= 4.0 and rank >= 7) or (zoom >= 7.5 and rank >= 5) or (zoom >= 11.0 and rank >= 3)
-		if not show_label or p.y < 142.0 or p.y > size.y - 133.0:
+		var show_label: bool = owned or focused or (zoom >= 4.0 and rank >= 7) or (zoom >= 7.5 and rank >= 5) or (zoom >= 12.0 and rank >= 3) or (zoom >= 20.0 and rank >= 2) or zoom >= 29.0
+		if not show_label or p.y < 150.0 or p.y > size.y - 145.0:
 			continue
+		var label_value: String = airport_label_text(item["airport"])
+		var label_size: int = 11 if zoom < 30.0 else 12
 		var tx: Vector2 = p + Vector2(8.0, -4.5)
-		var label_bounds: Rect2 = Rect2(tx.x - 3.0, tx.y - 12.0, 40.0, 18.0)
-		if label_bounds.end.x > size.x - 5.0:
+		var measured_width: float = ThemeDB.fallback_font.get_string_size(label_value, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
+		var label_bounds: Rect2 = Rect2(tx.x - 3.0, tx.y - 13.0, measured_width + 6.0, 20.0)
+		if label_bounds.end.x > size.x - 8.0 or tx.x < 0.0:
 			continue
 		var can_draw: bool = true
 		for previous in placed_labels:
@@ -220,7 +252,11 @@ func _draw() -> void:
 		if not can_draw:
 			continue
 		placed_labels.append(label_bounds)
-		draw_string(ThemeDB.fallback_font, tx, code, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("315764"))
+		# At high zoom, small airports get a clean and readable ICAO+name
+		# label. Before that, ICAO or IATA is enough.
+		if zoom >= 30.0:
+			draw_rect(label_bounds.grow(2.0), Color(0.96, 0.98, 0.96, 0.88))
+		draw_string(ThemeDB.fallback_font, tx, label_value, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size, Color("315764"))
 
 	var origin: String = pointer_from if pointer_down and gesture_kind == "route" and pointer_from != "" else route_origin
 	if origin != "" and game.airports_by_code.has(origin):
@@ -291,7 +327,7 @@ func change_zoom(factor: float, around: Vector2 = Vector2.ZERO) -> void:
 	var before: float = projection_scale()
 	var target_lon: float = camera_lon + (pivot.x - size.x * 0.5) / before
 	var target_lat: float = camera_lat - (pivot.y - size.y * 0.5) / (before * 1.17)
-	zoom = clampf(zoom * clampf(factor, 0.88, 1.12), MIN_ZOOM, MAX_ZOOM)
+	zoom = clampf(zoom * clampf(factor, 0.76, 1.32), MIN_ZOOM, MAX_ZOOM)
 	var after: float = projection_scale()
 	camera_lon = fposmod(target_lon - (pivot.x - size.x * 0.5) / after + 180.0, 360.0) - 180.0
 	camera_lat = clampf(target_lat + (pivot.y - size.y * 0.5) / (after * 1.17), -50.0, 74.0)
@@ -454,7 +490,7 @@ func _input(event: InputEvent) -> void:
 			var length_now: float = positions[0].distance_to(positions[1])
 			if pinch_active and pinch_length > 10.0 and length_now > 10.0:
 				pan(center - pinch_center)
-				change_zoom(length_now / pinch_length, center)
+				change_zoom(clampf(length_now / pinch_length, 0.88, 1.12), center)
 			pinch_active = true
 			touch_was_pinch = true
 			pinch_length = length_now
@@ -474,9 +510,9 @@ func _gui_input(event: InputEvent) -> void:
 			else:
 				handle_release(event.position)
 		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			change_zoom(1.12, event.position)
+			change_zoom(1.22, event.position)
 		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			change_zoom(0.89, event.position)
+			change_zoom(0.82, event.position)
 	elif event is InputEventMouseMotion and pointer_down:
 		if touch_input_seen and Time.get_ticks_msec() - touch_last_ms < 1900:
 			return
