@@ -59,7 +59,11 @@ def build_airports() -> None:
         scheduled = a.get("scheduled_service","").lower() == "yes"
         if typ not in ("large_airport","medium_airport","small_airport"):
             continue
-        if not scheduled and typ != "large_airport":
+        # airport-codes removes scheduled_service; IATA + medium/large types are
+        # useful candidates, although traffic class remains a game estimate.
+        if typ == "small_airport" and not (a.get("iata_code") or "").strip():
+            continue
+        if typ == "medium_airport" and not ((a.get("iata_code") or "").strip() or scheduled):
             continue
         icao = (a.get("gps_code") or a.get("ident") or "").strip().upper()
         iata = (a.get("iata_code") or "").strip().upper()
@@ -68,7 +72,11 @@ def build_airports() -> None:
         if iata and (not re.fullmatch("[A-Z]{3}",iata) or iata in known_iata):
             iata = ""
         try:
-            lat,lon=float(a["latitude_deg"]),float(a["longitude_deg"])
+            if a.get("coordinates"):
+                pair = a["coordinates"].split(",")
+                lat,lon = float(pair[0]),float(pair[1])
+            else:
+                lat,lon=float(a["latitude_deg"]),float(a["longitude_deg"])
         except (TypeError,ValueError):
             continue
         if not (-86<=lat<=86 and -180<=lon<=180):
