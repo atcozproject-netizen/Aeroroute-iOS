@@ -46,6 +46,7 @@ jobs:
         run: |
           python tests/validate_data.py
           python tools/build_assets.py
+          python tools/build_detail_tiles.py
           if [ -f tests/validate_v09_static.py ]; then
             python tests/validate_v09_static.py
           fi
