@@ -119,26 +119,31 @@ func _run() -> void:
 		_fail("Regional map is overcrowded with airport labels")
 		return
 	map_for_labels.zoom = 9.0
-	if view.goal_bar == null or view.goal_caption == null:
-		_fail("Airline goal progression is missing from HUD")
+
+	# The game is now a free-form network simulation, not XP progression.
+	if view.get("goal_bar") != null or view.get("level_effects") != null:
+		_fail("Removed level progression UI is still present")
 		return
-	if view.goal_bar.max_value != 160.0:
-		_fail("First airline milestone target is incorrect")
+	if view.game.level() != 8 or view.game.next_level_requirement() != -1:
+		_fail("Legacy passenger unlock gates were not disabled")
 		return
-	view.game.total_passengers = 160
-	view.game.changed.emit()
+	if view.game.featured_codes.size() < 350 or view.game.featured_codes.size() > 1350:
+		_fail("Curated commercial-airport network not loaded")
+		return
+	for essential in ["ESSA", "ESSP", "ESGJ", "OMDB", "WSSS", "EGLL", "KJFK"]:
+		if not view.game.featured_codes.has(essential):
+			_fail("Commercial airport filter dropped a relevant airport: " + essential)
+			return
+	var tile: Texture2D = load("res://data/map_tiles/09_01.png") as Texture2D
+	if tile == null or tile.get_size() != Vector2(1280.0, 1280.0):
+		_fail("High-resolution regional tiles missing in Godot PCK")
+		return
+	view.world_map.center_on("ESSA")
+	view.world_map.zoom = 48.0
+	view.world_map.queue_redraw()
 	await process_frame
-	if not view.level_effects.is_processing() or view.previous_level != 2:
-		_fail("Reaching passenger milestone did not trigger level-unlock animation")
-		return
-	if not view.goal_caption.text.contains("NIVÅ 2"):
-		_fail("Goal progress did not advance to next level")
-		return
-	view.game.total_passengers = 0
-	view.game.changed.emit()
-	await process_frame
-	if view.previous_level != 1 or view.goal_bar.value != 0.0:
-		_fail("Progress meter failed to reset for a new airline")
+	if view.world_map.detailed_tile_draws < 1:
+		_fail("The close-up map did not draw detail tiles")
 		return
 
 	view.game.landed.emit("TEST", 8, 37.50)
@@ -347,5 +352,5 @@ func _run() -> void:
 	if not visible_small:
 		_fail("A searched small airport must remain focused at regional zoom")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: decluttered labels, goal progression, level unlock, local zoom, FIR and touch")
+	print("AEROROUTE GUI SMOKE PASSED: commercial airports, crisp coastline tiles, no progression, routes, touch and FIR")
 	quit(0)
