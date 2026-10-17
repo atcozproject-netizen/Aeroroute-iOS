@@ -12,7 +12,7 @@ checks={
  'Multi-touch cannot start from UI':'pointers.size() > 0 and not _can_capture_touch(event.position)' in world,
  'iPhone taps are delivered to Godot GUI':'pointing/emulate_mouse_from_touch=true' in (p/'project.godot').read_text(),
  'FIR layer passes touches':'MOUSE_FILTER_IGNORE' in main and 'fir_layer' in main,
- 'FIR layer toggle':'set_fir_visible(active)' in main,
+ 'FIR three display modes':'fir_layer.set_mode(fir_mode)' in main and 'display_mode' in fir,
  'FIR data bundled':'data/fir_regions.json' in fir,
  'FIR error feedback':'fir_load_failed.emit' in fir,
  'World texture included':(p/'data/world_land.png').is_file(),
