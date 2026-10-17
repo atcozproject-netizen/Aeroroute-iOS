@@ -25,7 +25,12 @@ var pointer_last: Vector2 = Vector2.ZERO
 var pointer_down: bool = false
 var pointer_from: String = ""
 var pointer_moved: bool = false
-var drag_threshold: float = 10.0
+var drag_threshold: float = 11.0
+var route_draw_enabled: bool = false
+var gesture_kind: String = "idle"
+var hold_elapsed: float = 0.0
+const HOLD_TO_ROUTE_SECONDS: float = 0.42
+
 var temporary_line_end: Vector2 = Vector2.ZERO
 var pointers: Dictionary = {}
 var pinch_length: float = 0.0
@@ -226,7 +231,7 @@ func _draw() -> void:
 		placed_labels.append(label_bounds)
 		draw_string(ThemeDB.fallback_font, tx, code, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("213c48"))
 
-	var origin: String = pointer_from if pointer_down and pointer_from != "" else route_origin
+	var origin: String = pointer_from if pointer_down and gesture_kind == "route" and pointer_from != "" else route_origin
 	if origin != "" and game.airports_by_code.has(origin):
 		var start: Dictionary = game.airport(origin)
 		var a_point: Vector2 = project(float(start["lon"]), float(start["lat"]))
@@ -312,18 +317,25 @@ func handle_press(pos: Vector2) -> void:
 	pointer_down = true
 	pointer_start = pos
 	pointer_last = pos
-	pointer_from = nearest_airport(pos, 32.0)
+	pointer_from = nearest_airport(pos, 30.0)
 	pointer_moved = false
 	temporary_line_end = pos
+	hold_elapsed = 0.0
+	gesture_kind = "pending"
 
 func handle_motion(pos: Vector2) -> void:
 	if not pointer_down:
 		return
-	if pointer_start.distance_to(pos) > drag_threshold:
+	if gesture_kind == "pending" and pointer_start.distance_to(pos) > drag_threshold:
 		pointer_moved = true
-	if pointer_moved and pointer_from == "" and route_origin == "":
+		if route_draw_enabled and pointer_from != "":
+			gesture_kind = "route"
+		else:
+			# Every ordinary swipe pans, even when it begins on a marker.
+			gesture_kind = "pan"
+	if gesture_kind == "pan":
 		pan(pos - pointer_last)
-	else:
+	elif gesture_kind == "route":
 		temporary_line_end = pos
 		queue_redraw()
 	pointer_last = pos
@@ -331,19 +343,22 @@ func handle_motion(pos: Vector2) -> void:
 func handle_release(pos: Vector2) -> void:
 	if not pointer_down:
 		return
+	var origin_code: String = pointer_from
+	var was_route: bool = gesture_kind == "route"
+	var was_tap: bool = gesture_kind == "pending"
 	pointer_down = false
-	var destination: String = nearest_airport(pos, 33.0)
-	if pointer_from != "" and pointer_moved:
-		if destination != "" and destination != pointer_from:
-			route_drafted.emit(pointer_from, destination)
-		else:
-			# Preserve the source; user can tap the target instead of precisely dropping on a tiny point.
-			airport_tapped.emit(pointer_from)
-	elif route_origin != "" and destination != "" and destination != route_origin:
-		route_drafted.emit(route_origin, destination)
-	elif not pointer_moved and destination != "":
-		airport_tapped.emit(destination)
 	pointer_from = ""
+	gesture_kind = "idle"
+	hold_elapsed = 0.0
+	if was_route:
+		var target: String = nearest_airport(pos, 33.0)
+		if target != "" and origin_code != "" and target != origin_code:
+			route_drafted.emit(origin_code, target)
+	elif was_tap:
+		var selected: String = nearest_airport(pos, 30.0)
+		if selected != "":
+			airport_tapped.emit(selected)
+	# Panning and canceled routes never open a route planner.
 	queue_redraw()
 
 var gesture_captured: bool = false
@@ -352,6 +367,8 @@ var touch_was_pinch: bool = false
 
 func reset_gesture() -> void:
 	pointers.clear()
+	gesture_kind = "idle"
+	hold_elapsed = 0.0
 	touch_was_pinch = false
 	pointer_down = false
 	pointer_from = ""
@@ -361,9 +378,15 @@ func reset_gesture() -> void:
 	gesture_captured = false
 	queue_redraw()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if gesture_captured and Time.get_ticks_msec() - last_touch_event_ms > 8500:
 		reset_gesture()
+		return
+	if pointer_down and gesture_kind == "pending" and pointer_from != "" and not route_draw_enabled and not touch_was_pinch:
+		hold_elapsed += minf(delta, 0.25)
+		if hold_elapsed >= HOLD_TO_ROUTE_SECONDS:
+			gesture_kind = "route"
+			queue_redraw()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
@@ -406,6 +429,8 @@ func _input(event: InputEvent) -> void:
 			else:
 				pinch_active = true
 				touch_was_pinch = true
+				gesture_kind = "pinch"
+				hold_elapsed = 0.0
 				pointer_down = false
 				pointer_from = ""
 				var positions: Array = pointers.values()
@@ -426,6 +451,7 @@ func _input(event: InputEvent) -> void:
 				var remaining: Vector2 = pointers.values()[0]
 				handle_press(remaining)
 				pointer_from = ""
+				gesture_kind = "pan"
 				pointer_moved = true
 	else:
 		if not gesture_captured or not pointers.has(event.index):

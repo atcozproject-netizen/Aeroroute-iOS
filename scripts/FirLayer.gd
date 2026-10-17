@@ -3,17 +3,20 @@ extends Control
 signal fir_loaded(count: int)
 signal fir_load_failed(message: String)
 const FIR_URL: String = ""
-const STROKE: Color = Color(0.66, 0.48, 0.80, 0.96)
-const FIR_GLOW: Color = Color(0.14, 0.12, 0.27, 0.35)
-const LABEL: Color = Color("382b54")
-const LABEL_BG: Color = Color(0.97, 0.94, 0.99, 0.95)
+const STROKE: Color = Color(0.66, 0.76, 0.82, 0.36)
+const LABEL: Color = Color("294a56")
+const LABEL_BG: Color = Color(0.96, 0.97, 0.96, 0.87)
+const MAX_LABELS: int = 5
+const MAX_DENSE_LABELS: int = 3
 var world_map
 var regions: Array = []
 var loaded: bool = false
 var loading: bool = false
 var enabled: bool = false
+var display_mode: int = 0 # 0 off, 1 subtle boundaries, 2 names with strict declutter
 var http: HTTPRequest
 var camera_signature: Vector4 = Vector4(-999, -999, -999, -999)
+var viewport_height: float = -1.0
 
 func configure(map_control: Control) -> void:
 	world_map = map_control
@@ -25,13 +28,18 @@ func configure(map_control: Control) -> void:
 	set_process(false)
 	visible = false
 
-func set_fir_visible(value: bool) -> void:
-	enabled = value
-	visible = value
-	if value and not loaded and not loading:
+func set_mode(mode: int) -> void:
+	display_mode = clampi(mode, 0, 2)
+	enabled = display_mode != 0
+	visible = enabled
+	if enabled and not loaded and not loading:
 		load_firs()
-	set_process(value)
+	set_process(enabled)
 	queue_redraw()
+
+func set_fir_visible(value: bool) -> void:
+	set_mode(1 if value else 0)
+
 
 func load_firs() -> void:
 	loading = true
@@ -93,8 +101,9 @@ func _process(_delta: float) -> void:
 	if not enabled or not loaded or world_map == null:
 		return
 	var current: Vector4 = Vector4(world_map.camera_lon, world_map.camera_lat, world_map.zoom, world_map.size.x)
-	if camera_signature.distance_to(current) > 0.0001:
+	if camera_signature.distance_to(current) > 0.0001 or absf(viewport_height - size.y) > 1.0:
 		camera_signature = current
+		viewport_height = size.y
 		queue_redraw()
 
 func _draw() -> void:
@@ -105,6 +114,8 @@ func _draw() -> void:
 		return
 	var labels: Array[Rect2] = []
 	var budget: int = 0
+	var label_budget: int = 0
+	var label_limit: int = MAX_DENSE_LABELS if world_map.zoom < 10.0 else MAX_LABELS
 	var min_lon: float = world_map.camera_lon - size.x * 0.5 / pscale
 	var max_lon: float = world_map.camera_lon + size.x * 0.5 / pscale
 	var min_lat: float = world_map.camera_lat - size.y * 0.5 / (pscale * 1.17)
@@ -124,15 +135,14 @@ func _draw() -> void:
 				for coord in points:
 					if last_lon < 9000.0 and absf(coord.x - last_lon) > 180.0:
 						if poly.size() >= 2:
-							draw_polyline(poly, STROKE, 1.65, true)
+							draw_polyline(poly, STROKE, 0.85, true)
 						poly = PackedVector2Array()
 					last_lon = coord.x
 					poly.append(world_map.world_project_raw(coord.x, coord.y, offset))
 				if poly.size() >= 2:
-					draw_polyline(poly, FIR_GLOW, 4.2 if world_map.zoom > 7.0 else 2.6, true)
-					draw_polyline(poly, STROKE, 1.65 if world_map.zoom < 7.5 else 2.1, true)
+					draw_polyline(poly, STROKE, 0.85 if world_map.zoom < 8.0 else 1.05, true)
 			budget += points.size()
-		if world_map.zoom < 4.3:
+		if display_mode != 2 or world_map.zoom < 7.5 or label_budget >= label_limit:
 			continue
 		var label_pos: Vector2 = world_map.project(float(region["lon"]), float(region["lat"]))
 		if label_pos.x < 24.0 or label_pos.x > size.x - 55.0 or label_pos.y < 180.0 or label_pos.y > size.y - 158.0:
@@ -151,6 +161,6 @@ func _draw() -> void:
 				break
 		if free:
 			labels.append(box)
+			label_budget += 1
 			draw_rect(box, LABEL_BG)
-			draw_rect(box, STROKE, false, 1.0, true)
 			draw_string(font, label_pos + Vector2(1.0, -3.0), title, HORIZONTAL_ALIGNMENT_LEFT, 150.0, font_size, LABEL)
