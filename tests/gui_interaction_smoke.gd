@@ -396,5 +396,5 @@ func _run() -> void:
 	if not operational_text.contains("FLYGOPERATIVT") or not operational_text.contains("Nästa landning"):
 		_fail("Live network briefing is missing from routes screen")
 		return
-		print("AEROROUTE GUI SMOKE PASSED: commercial airports, crisp coastline tiles, no progression, living economics, flight trails and ops briefing")
+	print("AEROROUTE GUI SMOKE PASSED: commercial airports, crisp coastline tiles, no progression, living economics, flight trails and ops briefing")
 	quit(0)
