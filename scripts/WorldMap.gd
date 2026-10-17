@@ -3,6 +3,7 @@ extends Control
 
 signal airport_tapped(code: String)
 signal route_tapped(route_id: String)
+signal route_preview_changed(quote: Dictionary)
 signal route_drafted(start_code: String, end_code: String)
 
 const SEA_TOP = Color("72b8c7")
@@ -38,6 +39,7 @@ var drag_threshold: float = 11.0
 var route_draw_enabled: bool = false
 var gesture_kind: String = "idle"
 var hold_elapsed: float = 0.0
+var preview_destination: String = ""
 const HOLD_TO_ROUTE_SECONDS: float = 0.26
 
 var temporary_line_end: Vector2 = Vector2.ZERO
@@ -386,9 +388,13 @@ func _draw() -> void:
 		var start: Dictionary = game.airport(origin)
 		var a_point: Vector2 = project(float(start["lon"]), float(start["lat"]))
 		if pointer_down and pointer_moved:
-			draw_line(a_point, temporary_line_end, Color(1.0, 0.94, 0.78, 0.19), 8.0, true)
-			draw_line(a_point, temporary_line_end, Color("ffd09b"), 2.8, true)
-			draw_circle(temporary_line_end, 6.0, Color("ffd09b"))
+			var line_color: Color = Color("ffcc85")
+			if preview_destination != "":
+				var quote: Dictionary = game.route_quote(origin, preview_destination)
+				line_color = Color("58d9aa") if bool(quote["ok"]) else Color("fd8c7a")
+			draw_line(a_point, temporary_line_end, Color(line_color.r, line_color.g, line_color.b, 0.18), 8.0, true)
+			draw_line(a_point, temporary_line_end, line_color, 3.2, true)
+			draw_circle(temporary_line_end, 6.0, line_color)
 		elif route_origin != "":
 			draw_arc(a_point, 14.0, 0.0, TAU, 30, Color("ffe6b6"), 2.7, true)
 		draw_arc(a_point, 19.0, 0.0, TAU, 30, Color(1.0, 0.87, 0.62, 0.29), 3.0, true)
@@ -528,6 +534,27 @@ func pan(delta_pixels: Vector2) -> void:
 	camera_lat = clampf(camera_lat + safe_step.y / (projection_scale() * 1.17), -50.0, 74.0)
 	queue_redraw()
 
+func report_route_preview(pos: Vector2) -> void:
+	if pointer_from == "" or game == null:
+		return
+	# Be forgiving to a fingertip: a destination up to 64px away may
+	# preview a quote, but a final drop still needs the 30px target.
+	var target: String = nearest_airport(pos, 64.0)
+	if target == pointer_from:
+		target = ""
+	if target == preview_destination:
+		return
+	preview_destination = target
+	if target == "":
+		route_preview_changed.emit({"from": pointer_from, "to": "", "price": -1.0,
+			"ok": false, "reason": "Dra till en flygplats för att se priset"})
+	else:
+		route_preview_changed.emit(game.route_quote(pointer_from, target))
+
+func clear_route_preview() -> void:
+	preview_destination = ""
+	route_preview_changed.emit({})
+
 func handle_press(pos: Vector2) -> void:
 	follow_route_id = ""
 	pointer_down = true
@@ -538,6 +565,7 @@ func handle_press(pos: Vector2) -> void:
 	temporary_line_end = pos
 	hold_elapsed = 0.0
 	gesture_kind = "pending"
+	preview_destination = ""
 
 func handle_motion(pos: Vector2) -> void:
 	if not pointer_down:
@@ -555,6 +583,7 @@ func handle_motion(pos: Vector2) -> void:
 		if pointer_start.distance_to(pos) > 6.0:
 			pointer_moved = true
 		temporary_line_end = pos
+		report_route_preview(pos)
 		queue_redraw()
 	pointer_last = pos
 
@@ -569,6 +598,7 @@ func handle_release(pos: Vector2) -> void:
 	gesture_kind = "idle"
 	hold_elapsed = 0.0
 	if was_route:
+		clear_route_preview()
 		var target: String = nearest_airport(pos, 30.0)
 		if target != "" and origin_code != "" and target != origin_code:
 			route_drafted.emit(origin_code, target)
@@ -602,6 +632,8 @@ func reset_gesture() -> void:
 	gesture_kind = "idle"
 	hold_elapsed = 0.0
 	touch_was_pinch = false
+	if preview_destination != "" or gesture_kind == "route":
+		clear_route_preview()
 	pointer_down = false
 	pointer_from = ""
 	pointer_moved = false
@@ -631,6 +663,7 @@ func _process(delta: float) -> void:
 		hold_elapsed += minf(delta, 0.25)
 		if hold_elapsed >= HOLD_TO_ROUTE_SECONDS:
 			gesture_kind = "route"
+			report_route_preview(pointer_last)
 			queue_redraw()
 
 func _notification(what: int) -> void:

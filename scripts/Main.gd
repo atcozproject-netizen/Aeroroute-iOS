@@ -1,5 +1,5 @@
 extends Control
-## Aeroroute: native Godot scene/UI and interactions. iPhone portrait, canvas_items stretch.
+## Aeroroute: responsive Godot airline game UI for iPhone portrait and landscape.
 
 const StateScript = preload("res://scripts/GameState.gd")
 const MapScript = preload("res://scripts/WorldMap.gd")
@@ -25,6 +25,12 @@ var map_status: Label
 var profit_layer: Control
 var balance_tween: Tween
 var toast_tween: Tween
+var cockpit_background: ColorRect
+var cockpit_top: VBoxContainer
+var clock_dock: PanelContainer
+var quote_card: PanelContainer
+var quote_label: Label
+var layout_mode: String = "portrait"
 var hud: PanelContainer
 var hud_balance: Label
 var hud_routes: Label
@@ -62,6 +68,8 @@ var follow_button: Button
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	create_scene()
+	resized.connect(_refresh_layout)
+	call_deferred("_refresh_layout")
 	game.changed.connect(_on_game_changed)
 	game.news.connect(_on_news)
 	game.landed.connect(_on_landed)
@@ -178,6 +186,7 @@ func create_scene() -> void:
 	world_map.airport_tapped.connect(_airport_tapped)
 	world_map.route_tapped.connect(_route_tapped)
 	world_map.route_drafted.connect(_quick_create_route)
+	world_map.route_preview_changed.connect(_update_route_quote)
 	fir_layer = FirScript.new()
 	fir_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	fir_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -203,12 +212,14 @@ func create_scene() -> void:
 	profit_layer.setup(game, world_map)
 	# Opaque, non-interactive header gives the brand and counters proper readability.
 	var header: ColorRect = ColorRect.new()
+	cockpit_background = header
 	header.color = Color("163d4b")
 	header.anchor_right = 1.0
 	header.offset_bottom = 121.0
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(header)
 	var top: VBoxContainer = stack(6)
+	cockpit_top = top
 	top.anchor_right = 1.0
 	top.offset_left = 11.0
 	top.offset_right = -11.0
@@ -361,7 +372,8 @@ func create_scene() -> void:
 	# FIR is enabled after the HUD and notification labels have been created.
 
 
-	var bottom_controls: PanelContainer = add_styled_panel(Color("fcf9ed"), 15)
+	var bottom_controls: PanelContainer = add_styled_panel(Color("1e4c5c"), 15)
+	clock_dock = bottom_controls
 	var dock_style: StyleBoxFlat = bottom_controls.get_theme_stylebox("panel") as StyleBoxFlat
 	dock_style.content_margin_top = 6
 	dock_style.content_margin_bottom = 6
@@ -380,8 +392,8 @@ func create_scene() -> void:
 	var time_info: VBoxContainer = stack(3)
 	time_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	time_row.add_child(time_info)
-	time_info.add_child(label("SPELTID", 10, MUTED))
-	clock_label = label("DAG 01", 17, INK, true)
+	time_info.add_child(label("FLYGTRAFIK", 10, Color("b8d4d6")))
+	clock_label = label("INGA FLYG", 16, Color("fff8e7"), true)
 	time_info.add_child(clock_label)
 	play_button = button("PAUS", false)
 	play_button.custom_minimum_size.x = 78
@@ -396,7 +408,7 @@ func create_scene() -> void:
 		game.save_game()
 	)
 
-	content_view = add_styled_panel(Color("f9f9f3"), 0)
+	content_view = add_styled_panel(Color("edf6f3"), 0)
 	content_view.anchor_right = 1.0
 	content_view.anchor_bottom = 1.0
 	content_view.offset_bottom = -64.0
@@ -439,6 +451,24 @@ func create_scene() -> void:
 	sheet_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sheet_scroll.add_child(sheet_body)
 
+	# Cost preview is touch transparent, centered above route action controls.
+	quote_card = add_styled_panel(Color("163d4b"), 13)
+	quote_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	quote_card.anchor_left = 0.5
+	quote_card.anchor_right = 0.5
+	quote_card.anchor_top = 1.0
+	quote_card.anchor_bottom = 1.0
+	quote_card.offset_left = -150.0
+	quote_card.offset_right = 150.0
+	quote_card.offset_top = -267.0
+	quote_card.offset_bottom = -211.0
+	quote_card.visible = false
+	add_child(quote_card)
+	quote_label = label("", 12, Color("fff6e6"), true)
+	quote_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	quote_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	quote_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	quote_card.add_child(quote_label)
 	active_toast = label("", 12, PAPER, true)
 	active_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	active_toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
@@ -459,6 +489,101 @@ func create_scene() -> void:
 	add_child(map_status)
 	fir_layer.set_mode(1)
 	update_map_status()
+	_refresh_layout()
+
+func _update_route_quote(quote: Dictionary) -> void:
+	if quote_card == null:
+		return
+	if quote.is_empty() or not game.initialized or current_sheet != "" or active_tab != "map":
+		quote_card.visible = false
+		return
+	quote_card.visible = true
+	var destination: String = str(quote.get("to", ""))
+	var price: float = float(quote.get("price", -1.0))
+	var is_ok: bool = bool(quote.get("ok", false))
+	var reason: String = str(quote.get("reason", ""))
+	var style: StyleBoxFlat = quote_card.get_theme_stylebox("panel") as StyleBoxFlat
+	style.bg_color = Color("1b6559") if is_ok else Color("713f49") if destination != "" else Color("204959")
+	if destination == "":
+		quote_label.text = "DRA TILL EN FLYGPLATS\nPriset visas innan du släpper"
+	elif price < 0.0:
+		quote_label.text = "%s → %s · EJ MÖJLIG\n%s" % [quote["from"], destination, reason]
+	elif is_ok:
+		quote_label.text = "%s → %s · %s\n✓ DU HAR RÅD · SALDO %s" % [quote["from"], destination, game.money(price), game.money(game.cash)]
+	else:
+		quote_label.text = "%s → %s · %s\n%s · SALDO %s" % [quote["from"], destination, game.money(price), reason, game.money(game.cash)]
+
+func _refresh_layout() -> void:
+	_layout_for_size(size)
+
+func _layout_for_size(view_size: Vector2) -> void:
+	if cockpit_background == null or clock_dock == null or nav_bar == null:
+		return
+	var landscape: bool = view_size.x > view_size.y * 1.12
+	layout_mode = "landscape" if landscape else "portrait"
+	var cockpit_width: float = minf(420.0, view_size.x - 6.0) if landscape else view_size.x
+	cockpit_background.anchor_right = 0.0 if landscape else 1.0
+	cockpit_background.offset_right = cockpit_width if landscape else 0.0
+	cockpit_background.offset_bottom = 105.0
+	cockpit_top.anchor_right = 0.0 if landscape else 1.0
+	cockpit_top.offset_right = cockpit_width - 10.0 if landscape else -11.0
+	zoom_buttons.offset_top = 113.0 if landscape else 143.0
+	zoom_buttons.offset_left = -52.0 if landscape else -61.0
+	zoom_buttons.offset_right = -8.0 if landscape else -13.0
+	nav_bar.anchor_left = 0.0
+	nav_bar.anchor_right = 0.0 if landscape else 1.0
+	nav_bar.offset_left = 8.0 if landscape else 0.0
+	nav_bar.offset_right = minf(view_size.x * 0.65, 500.0) if landscape else 0.0
+	nav_bar.offset_top = -56.0 if landscape else -61.0
+	nav_bar.offset_bottom = 0.0
+	if landscape:
+		clock_dock.anchor_left = 1.0
+		clock_dock.anchor_right = 1.0
+		clock_dock.anchor_top = 0.0
+		clock_dock.anchor_bottom = 0.0
+		clock_dock.offset_left = -326.0
+		clock_dock.offset_right = -12.0
+		clock_dock.offset_top = 13.0
+		clock_dock.offset_bottom = 74.0
+	else:
+		clock_dock.anchor_left = 0.0
+		clock_dock.anchor_right = 1.0
+		clock_dock.anchor_top = 1.0
+		clock_dock.anchor_bottom = 1.0
+		clock_dock.offset_left = 11.0
+		clock_dock.offset_right = -11.0
+		clock_dock.offset_top = -125.0
+		clock_dock.offset_bottom = -65.0
+	route_mode_button.offset_top = -128.0 if landscape else -196.0
+	route_mode_button.offset_bottom = -76.0 if landscape else -147.0
+	follow_button.offset_top = route_mode_button.offset_top
+	follow_button.offset_bottom = route_mode_button.offset_bottom
+	if quote_card != null:
+		quote_card.anchor_top = 0.0 if landscape else 1.0
+		quote_card.anchor_bottom = 0.0 if landscape else 1.0
+		quote_card.offset_top = 91.0 if landscape else -260.0
+		quote_card.offset_bottom = 151.0 if landscape else -204.0
+	if sheet != null:
+		if landscape:
+			sheet.anchor_left = 1.0
+			sheet.anchor_right = 1.0
+			sheet.anchor_top = 0.0
+			sheet.anchor_bottom = 1.0
+			sheet.offset_left = -minf(466.0, view_size.x * 0.57)
+			sheet.offset_right = -10.0
+			sheet.offset_top = 80.0
+			sheet.offset_bottom = -64.0
+		else:
+			sheet.anchor_left = 0.0
+			sheet.anchor_right = 1.0
+			sheet.anchor_top = 1.0
+			sheet.anchor_bottom = 1.0
+			sheet.offset_left = 0.0
+			sheet.offset_right = 0.0
+			sheet.offset_top = -minf(555.0, view_size.y * 0.73)
+			sheet.offset_bottom = -62.0
+	if content_view != null:
+		content_view.offset_bottom = -58.0 if landscape else -62.0
 
 func map_gesture_active() -> bool:
 	return active_tab == "map" and game.initialized and not (
@@ -469,10 +594,11 @@ func map_gesture_active() -> bool:
 func map_can_interact(pos: Vector2) -> bool:
 	if not map_gesture_active():
 		return false
-	if pos.y < 126.0 or pos.y > size.y - 210.0:
-		return false
-	if pos.x > size.x - 88.0 and pos.y >= 134.0 and pos.y <= 382.0:
-		return false
+	# Respect ACTUAL UI geometry in either orientation, rather than
+	# rejecting wide horizontal strips of playable map by hardcoded Y.
+	for control in [cockpit_background, nav_bar, clock_dock, zoom_buttons, route_mode_button, follow_button]:
+		if control != null and control.visible and control.get_global_rect().has_point(pos):
+			return false
 	return true
 
 func clear_children(node: Node) -> void:
@@ -497,6 +623,8 @@ func heading(eyebrow: String, title: String, sub: String = "") -> void:
 
 func open_sheet(sheet_type: String) -> void:
 	world_map.reset_gesture()
+	if quote_card != null:
+		quote_card.visible = false
 	current_sheet = sheet_type
 	shade.visible = true
 	sheet.visible = true
@@ -998,7 +1126,7 @@ func refresh_hud() -> void:
 	hud_balance.text = game.money(game.cash)
 	hud_routes.text = str(game.routes.size())
 	hud_passengers.text = str(game.total_passengers)
-	clock_label.text = "DAG %02d" % game.day
+	clock_label.text = "NÄSTA %s · %d S" % [str(ops["next_airport"]), int(ops["next_seconds"])] if int(ops["routes"]) > 0 else "BYGG FÖRSTA LINJEN"
 	play_button.text = "SPELA" if game.paused else "PAUS"
 	if current_sheet == "route" and flight_eta != null:
 		var r: Dictionary = game.get_route(current_route)

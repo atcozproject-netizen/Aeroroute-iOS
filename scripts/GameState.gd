@@ -307,19 +307,44 @@ func get_route(route_id: String) -> Dictionary:
 			return r
 	return {}
 
-func create_route(a_code: String, b_code: String) -> String:
-	if a_code == b_code or not airports_by_code.has(a_code) or not airports_by_code.has(b_code):
-		return "Ogiltig flygplats"
+func route_quote(a_code: String, b_code: String) -> Dictionary:
+	# One source of truth for route price, affordability and airport gates.
+	var quote: Dictionary = {"from": a_code, "to": b_code, "price": -1.0, "ok": false, "reason": ""}
+	if a_code == "" or b_code == "" or a_code == b_code:
+		quote["reason"] = "Välj två olika flygplatser"
+		return quote
+	if not airports_by_code.has(a_code) or not airports_by_code.has(b_code):
+		quote["reason"] = "Okänd flygplats"
+		return quote
+	if not is_featured(a_code) or not is_featured(b_code):
+		quote["reason"] = "Flygplatsen ingår inte i det aktuella nätverket"
+		return quote
 	if not get_route(route_key(a_code, b_code)).is_empty():
-		return "Linjen finns redan"
+		quote["reason"] = "Linjen finns redan"
+		return quote
 	var plane: Dictionary = initial_plane(a_code, b_code)
 	if plane.is_empty():
-		return "Ingen flygplansmodell har tillräcklig räckvidd"
-	if not gates_available(a_code) or not gates_available(b_code):
-		return "Uppgradera terminalkapaciteten först"
+		quote["reason"] = "För lång sträcka för tillgängliga flygplan"
+		return quote
 	var fee: float = route_cost(a_code, b_code)
+	quote["price"] = fee
+	quote["plane"] = str(plane["name"])
+	quote["distance"] = kilometers(a_code, b_code)
+	if not gates_available(a_code) or not gates_available(b_code):
+		quote["reason"] = "Uppgradera terminalkapaciteten först"
+		return quote
 	if cash < fee:
-		return "Otillräckligt med AirCredits"
+		quote["reason"] = "Saknar %s" % money(fee - cash)
+		return quote
+	quote["ok"] = true
+	return quote
+
+func create_route(a_code: String, b_code: String) -> String:
+	var quote: Dictionary = route_quote(a_code, b_code)
+	if not bool(quote["ok"]):
+		return str(quote["reason"])
+	var plane: Dictionary = initial_plane(a_code, b_code)
+	var fee: float = float(quote["price"])
 	cash = rounded(cash - fee)
 	var km: float = kilometers(a_code, b_code)
 	routes.append({"id": route_key(a_code, b_code), "from": a_code, "to": b_code,
