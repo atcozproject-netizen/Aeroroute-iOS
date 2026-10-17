@@ -445,5 +445,109 @@ func _run() -> void:
 	if view.game.routes.size() != 1:
 		_fail("Cockpit redesign unexpectedly changed route model")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: cockpit redesign, follow aircraft, safe map input and real airline economics")
+	# V1.2: airport tap must show one-click terminal upgrade and the
+	# correct aircraft picker for each connected line.
+	view.game.owned["ESSA"] = true
+	view.game.owned["ESSP"] = true
+	view.game.cash = 9999.0
+	view.game.terminals["ESSA"] = 1
+	view.show_airport("ESSA")
+	await process_frame
+	if view.current_sheet != "airport":
+		_fail("Tap on airport must open the simplified airport sheet")
+		return
+	var upgrade_action: Button = null
+	var connected_action: Button = null
+	for node in view.sheet_body.find_children("*", "Button", true, false):
+		if node is Button:
+			if node.text.contains("UPPGRADERA FLYGPLATS"):
+				upgrade_action = node
+			if node.text.contains("ESSA") and node.text.contains("ESSP"):
+				connected_action = node
+	if upgrade_action == null or connected_action == null:
+		_fail("Airport sheet must display terminal upgrade and connected flight")
+		return
+	var expected_upgrade_price: float = view.game.terminal_upgrade_price("ESSA")
+	var previous_cash: float = view.game.cash
+	upgrade_action.pressed.emit()
+	await process_frame
+	if int(view.game.terminals["ESSA"]) != 2 or absf(previous_cash - view.game.cash - expected_upgrade_price) > 0.1:
+		_fail("Airport terminal upgrade charged incorrectly or failed")
+		return
+	view.show_airport("ESSA")
+	await process_frame
+	for node in view.sheet_body.find_children("*", "Button", true, false):
+		if node is Button and node.text.contains("ESSP"):
+			node.pressed.emit()
+			break
+	await process_frame
+	if view.current_sheet != "aircraft" or view.current_route != route_id:
+		_fail("Airport's connected route did not open its aircraft picker")
+		return
+	var aircraft_actions: int = 0
+	for node in view.sheet_body.find_children("*", "Button", true, false):
+		if node is Button and node.text.contains("säten"):
+			aircraft_actions += 1
+	if aircraft_actions < 5:
+		_fail("Aircraft picker must list real alternative models")
+		return
+	# Multiple connected routes must not imply changing every plane at once.
+	var second_model: Dictionary = view.game.initial_plane("ESSA", "ESGG")
+	if second_model.is_empty():
+		_fail("Missing alternate route aircraft for multi-route test")
+		return
+	var second_id: String = view.game.route_key("ESSA", "ESGG")
+	view.game.routes.append({"id":second_id,"from":"ESSA","to":"ESGG",
+		"plane":str(second_model["id"]),"fare":1.2,"progress":0.25,"direction":0})
+	view.show_airport("ESSA")
+	await process_frame
+	if view.game.connected_routes("ESSA").size() != 2:
+		_fail("Airport multi-route list does not show both linked flights")
+		return
+	var multi_route_buttons: int = 0
+	for node in view.sheet_body.find_children("*", "Button", true, false):
+		if node is Button and (node.text.contains("ESSP") or node.text.contains("ESGG")):
+			multi_route_buttons += 1
+	if multi_route_buttons != 2:
+		_fail("Airport list must show exactly one action for each connected route")
+		return
+	# A normal map tap ON a line, far from any airport, must open aircraft
+	# selection; a pan must never do so.
+	view.show_tab("map")
+	view.world_map.camera_lon = 16.3
+	view.world_map.camera_lat = 59.1
+	view.world_map.zoom = 26.0
+	await process_frame
+	var arc: PackedVector2Array = view.world_map.route_points("ESSA", "ESSP")
+	var hit: Vector2 = arc[12]
+	if view.world_map.nearest_route(hit, 4.0) != route_id:
+		_fail("Geometric tap hit test failed for flight route")
+		return
+	if view.world_map.nearest_airport(hit, 17.0) != "":
+		_fail("Line test hits airport, unable to verify priority")
+		return
+	view.world_map.handle_press(hit)
+	view.world_map.handle_release(hit)
+	await process_frame
+	if view.current_sheet != "aircraft" or view.current_route != route_id:
+		_fail("Touching drawn flight route did not open plane list")
+		return
+	var replacement: Dictionary = {}
+	for p in view.game.catalog:
+		if str(p["id"]) != str(synthetic["plane"]) and float(p["range"]) >= view.game.kilometers("ESSA","ESSP"):
+			replacement = p
+			break
+	if replacement.is_empty():
+		_fail("No compatible plane to test swap")
+		return
+	var cash_before_plane: float = view.game.cash
+	var swap_cost: float = view.game.plane_change_price(route_id, str(replacement["id"]))
+	var swap_error: String = view.game.change_plane(route_id, str(replacement["id"]))
+	if swap_error != "" or str(synthetic["plane"]) != str(replacement["id"]):
+		_fail("Changing selected plane did not update only requested route")
+		return
+	if str(view.game.get_route(second_id)["plane"]) != str(second_model["id"]) or absf(view.game.cash - (cash_before_plane - swap_cost)) > 0.1:
+		_fail("Plane change affected another route or charged wrong amount")
+		return
+	print("AEROROUTE GUI SMOKE PASSED: simple airport UI, multi-route plane picker, direct route taps, terminal and aircraft costs, cockpit, touch")
 	quit(0)
