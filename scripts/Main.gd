@@ -55,6 +55,7 @@ var flight_eta: Label
 var search_line: LineEdit
 var search_results: VBoxContainer
 var zoom_buttons: VBoxContainer
+var follow_button: Button
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -156,8 +157,8 @@ func expanded(control: Control) -> Control:
 func build_stat(title: String, initial: String, save_to: String) -> VBoxContainer:
 	var v: VBoxContainer = stack(3)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(label(title, 10, MUTED))
-	var value: Label = label(initial, 18, INK, true)
+	v.add_child(label(title, 9, Color("b8d6d9")))
+	var value: Label = label(initial, 17, Color("ffffff"), true)
 	v.add_child(value)
 	match save_to:
 		"cash": hud_balance = value
@@ -199,21 +200,21 @@ func create_scene() -> void:
 	profit_layer.setup(game, world_map)
 	# Opaque, non-interactive header gives the brand and counters proper readability.
 	var header: ColorRect = ColorRect.new()
-	header.color = Color("e2efe9")
+	header.color = Color("163d4b")
 	header.anchor_right = 1.0
-	header.offset_bottom = 172.0
+	header.offset_bottom = 121.0
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(header)
-	var top: VBoxContainer = stack(10)
+	var top: VBoxContainer = stack(6)
 	top.anchor_right = 1.0
-	top.offset_left = 16.0
-	top.offset_right = -16.0
-	top.offset_top = 15.0
+	top.offset_left = 11.0
+	top.offset_right = -11.0
+	top.offset_top = 7.0
 	add_child(top)
 	var brand_row: HBoxContainer = row(9)
 	top.add_child(brand_row)
-	var logo_box: PanelContainer = add_styled_panel(DARK, 11)
-	logo_box.custom_minimum_size = Vector2(43, 43)
+	var logo_box: PanelContainer = add_styled_panel(Color("255b69"), 12)
+	logo_box.custom_minimum_size = Vector2(40, 40)
 	brand_row.add_child(logo_box)
 	var mark: Label = label("A", 21, Color("e7b88a"), true)
 	mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -221,23 +222,30 @@ func create_scene() -> void:
 	logo_box.add_child(mark)
 	var brand_text: VBoxContainer = stack(0)
 	brand_row.add_child(expanded(brand_text))
-	brand_text.add_child(label("AEROROUTE", 18, INK, true))
-	brand_status = label("DIN VÄRLD. DITT FLYGBOLAG.", 10, Color("608892"))
+	brand_text.add_child(label("AEROROUTE", 17, Color("fff9e8"), true))
+	brand_status = label("DIN VÄRLD. DITT FLYGBOLAG.", 9, Color("a8ccd0"))
 	brand_text.add_child(brand_status)
 	var search_btn: Button = button("SÖK", false)
-	search_btn.custom_minimum_size = Vector2(53, 43)
+	search_btn.custom_minimum_size = Vector2(43, 40)
+	search_btn.add_theme_font_size_override("font_size", 11)
 	search_btn.tooltip_text = "Sök flygplats"
 	brand_row.add_child(search_btn)
 	search_btn.pressed.connect(show_search)
 	var center_btn: Button = button("HEM", false)
-	center_btn.custom_minimum_size = Vector2(53, 43)
+	center_btn.custom_minimum_size = Vector2(43, 40)
+	center_btn.add_theme_font_size_override("font_size", 11)
 	center_btn.tooltip_text = "Visa huvudflygplatsen"
 	brand_row.add_child(center_btn)
 	center_btn.pressed.connect(func() -> void:
 		world_map.reset_gesture()
 		world_map.center_on(game.home)
 	)
-	hud = add_styled_panel(Color("fffdf7"), 17)
+	hud = add_styled_panel(Color("285c69"), 11)
+	var compact_style: StyleBoxFlat = hud.get_theme_stylebox("panel") as StyleBoxFlat
+	compact_style.content_margin_left = 10
+	compact_style.content_margin_right = 10
+	compact_style.content_margin_top = 5
+	compact_style.content_margin_bottom = 5
 	top.add_child(hud)
 	var stats: HBoxContainer = row(7)
 	hud.add_child(stats)
@@ -245,11 +253,16 @@ func create_scene() -> void:
 	stats.add_child(build_stat("LINJER", "0", "routes"))
 	stats.add_child(build_stat("PASSAGERARE", "0", "passengers"))
 
-	nav_bar = add_styled_panel(Color("fffdf8"), 0)
+	nav_bar = add_styled_panel(Color("153b49"), 0)
+	var nav_style: StyleBoxFlat = nav_bar.get_theme_stylebox("panel") as StyleBoxFlat
+	nav_style.content_margin_top = 5
+	nav_style.content_margin_bottom = 5
+	nav_style.content_margin_left = 8
+	nav_style.content_margin_right = 8
 	nav_bar.anchor_top = 1.0
 	nav_bar.anchor_bottom = 1.0
 	nav_bar.anchor_right = 1.0
-	nav_bar.offset_top = -82.0
+	nav_bar.offset_top = -64.0
 	nav_bar.offset_bottom = 0.0
 	add_child(nav_bar)
 	var nav: HBoxContainer = row(6)
@@ -257,19 +270,20 @@ func create_scene() -> void:
 	for item in [{"id":"map","name":"KARTA"},{"id":"routes","name":"LINJER"},{"id":"fleet","name":"FLOTTA"},{"id":"company","name":"BOLAG"}]:
 		var b: Button = button(str(item["name"]), false)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size.y = 43.0
+		b.custom_minimum_size.y = 42.0
+		b.add_theme_font_size_override("font_size", 11)
 		nav.add_child(b)
 		var id: String = str(item["id"])
 		b.pressed.connect(func() -> void: show_tab(id))
 		tab_buttons[id] = b
 
 	# Map controls remain accessible without pinch gestures and offer quick recentering.
-	zoom_buttons = stack(8)
+	zoom_buttons = stack(6)
 	zoom_buttons.anchor_left = 1.0
 	zoom_buttons.anchor_right = 1.0
 	zoom_buttons.offset_left = -61.0
 	zoom_buttons.offset_right = -13.0
-	zoom_buttons.offset_top = 222.0  # Keep controls below the balance/status HUD
+	zoom_buttons.offset_top = 149.0  # below compact cockpit HUD
 	zoom_buttons.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(zoom_buttons)
 	var zoom_in: Button = button("+", false)
@@ -297,11 +311,36 @@ func create_scene() -> void:
 		fir_button.text = "AV" if fir_mode == 0 else ("FIR" if fir_mode == 1 else "FIR+")
 		update_map_status()
 	)
-	route_mode_button = button("LINJE", false)
+	route_mode_button = button("+ NY LINJE", true)
 	route_mode_button.toggle_mode = true
-	route_mode_button.custom_minimum_size = Vector2(48, 44)
-	zoom_buttons.add_child(route_mode_button)
+	route_mode_button.anchor_top = 1.0
+	route_mode_button.anchor_bottom = 1.0
+	route_mode_button.offset_top = -202.0
+	route_mode_button.offset_bottom = -153.0
+	route_mode_button.offset_left = 13.0
+	route_mode_button.offset_right = 134.0
+	route_mode_button.custom_minimum_size = Vector2(121.0, 49.0)
+	add_child(route_mode_button)
+	follow_button = button("✈ FÖLJ FLYG", false)
+	follow_button.anchor_top = 1.0
+	follow_button.anchor_bottom = 1.0
+	follow_button.offset_top = -202.0
+	follow_button.offset_bottom = -153.0
+	follow_button.offset_left = 145.0
+	follow_button.offset_right = 271.0
+	follow_button.custom_minimum_size = Vector2(126.0, 49.0)
+	follow_button.disabled = true
+	add_child(follow_button)
+	follow_button.pressed.connect(func() -> void:
+		var ops: Dictionary = game.network_snapshot()
+		var next_id: String = str(ops.get("next_route_id", ""))
+		if world_map.follow_route_id != "" and next_id != world_map.follow_route_id:
+			next_id = world_map.follow_route_id
+		var active: bool = world_map.toggle_follow(next_id)
+		follow_button.text = "✕ SLUTA FÖLJA" if active else "✈ FÖLJ FLYG"
+	)
 	route_mode_button.toggled.connect(func(active: bool) -> void:
+		route_mode_button.text = "✓ VÄLJ 2 PLATSER" if active else "+ NY LINJE"
 		route_mode = active
 		world_map.route_draw_enabled = active
 		route_origin = ""
@@ -312,15 +351,18 @@ func create_scene() -> void:
 	# FIR is enabled after the HUD and notification labels have been created.
 
 
-	var bottom_controls: PanelContainer = add_styled_panel(Color("fffcf4"), 16)
+	var bottom_controls: PanelContainer = add_styled_panel(Color("fcf9ed"), 15)
+	var dock_style: StyleBoxFlat = bottom_controls.get_theme_stylebox("panel") as StyleBoxFlat
+	dock_style.content_margin_top = 6
+	dock_style.content_margin_bottom = 6
 	bottom_controls.anchor_left = 0.0
 	bottom_controls.anchor_right = 1.0
 	bottom_controls.anchor_top = 1.0
 	bottom_controls.anchor_bottom = 1.0
-	bottom_controls.offset_left = 15.0
-	bottom_controls.offset_right = -15.0
-	bottom_controls.offset_top = -152.0
-	bottom_controls.offset_bottom = -87.0
+	bottom_controls.offset_left = 12.0
+	bottom_controls.offset_right = -12.0
+	bottom_controls.offset_top = -130.0
+	bottom_controls.offset_bottom = -70.0
 	bottom_controls.name = "ClockDock"
 	add_child(bottom_controls)
 	var time_row: HBoxContainer = row(8)
@@ -347,7 +389,7 @@ func create_scene() -> void:
 	content_view = add_styled_panel(Color("f9f9f3"), 0)
 	content_view.anchor_right = 1.0
 	content_view.anchor_bottom = 1.0
-	content_view.offset_bottom = -77.0
+	content_view.offset_bottom = -64.0
 	content_view.visible = false
 	add_child(content_view)
 	var scroll := ScrollContainer.new()
@@ -376,7 +418,7 @@ func create_scene() -> void:
 	sheet.anchor_top = 1.0
 	sheet.anchor_bottom = 1.0
 	sheet.offset_top = -555.0
-	sheet.offset_bottom = -77.0
+	sheet.offset_bottom = -64.0
 	sheet.visible = false
 	add_child(sheet)
 	sheet_scroll = ScrollContainer.new()
@@ -392,8 +434,8 @@ func create_scene() -> void:
 	active_toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	active_toast.offset_left = -170
 	active_toast.offset_right = 170
-	active_toast.offset_top = -196
-	active_toast.offset_bottom = -166
+	active_toast.offset_top = -252
+	active_toast.offset_bottom = -224
 	active_toast.visible = false
 	add_child(active_toast)
 	map_status = label("", 11, Color("fbf2e3"), true)
@@ -401,8 +443,8 @@ func create_scene() -> void:
 	map_status.anchor_top = 1.0
 	map_status.anchor_bottom = 1.0
 	map_status.offset_left = 17.0
-	map_status.offset_top = -189.0
-	map_status.offset_bottom = -169.0
+	map_status.offset_top = -229.0
+	map_status.offset_bottom = -208.0
 	map_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(map_status)
 	fir_layer.set_mode(1)
@@ -417,9 +459,9 @@ func map_gesture_active() -> bool:
 func map_can_interact(pos: Vector2) -> bool:
 	if not map_gesture_active():
 		return false
-	if pos.y < 184.0 or pos.y > size.y - 156.0:
+	if pos.y < 126.0 or pos.y > size.y - 210.0:
 		return false
-	if pos.x > size.x - 88.0 and pos.y >= 207.0 and pos.y <= 543.0:
+	if pos.x > size.x - 88.0 and pos.y >= 134.0 and pos.y <= 382.0:
 		return false
 	return true
 
@@ -723,8 +765,14 @@ func show_tab(tab: String) -> void:
 	flight_layer.visible = tab == "map"
 	get_node("ClockDock").visible = tab == "map"
 	zoom_buttons.visible = tab == "map"
+	route_mode_button.visible = tab == "map"
+	follow_button.visible = tab == "map"
+	if tab == "map":
+		follow_button.disabled = game.routes.is_empty()
 	if tab != "map":
 		world_map.route_draw_enabled = false
+		world_map.toggle_follow("")
+		follow_button.text = "✈ FÖLJ FLYG"
 		route_mode = false
 		route_origin = ""
 		world_map.route_origin = ""
@@ -736,7 +784,7 @@ func show_tab(tab: String) -> void:
 		nav_button.modulate = Color.WHITE
 		var active: bool = key == tab
 		var nav_style := StyleBoxFlat.new()
-		nav_style.bg_color = Color("d8eae3") if active else Color("f5f7f2")
+		nav_style.bg_color = Color("e8b877") if active else Color("255967")
 		nav_style.corner_radius_top_left = 12
 		nav_style.corner_radius_top_right = 12
 		nav_style.corner_radius_bottom_left = 12
@@ -744,7 +792,7 @@ func show_tab(tab: String) -> void:
 		nav_style.content_margin_left = 4
 		nav_style.content_margin_right = 4
 		nav_button.add_theme_stylebox_override("normal", nav_style)
-		nav_button.add_theme_color_override("font_color", DARK if active else Color("77939a"))
+		nav_button.add_theme_color_override("font_color", Color("173d49") if active else Color("deeff0"))
 	if tab != "map":
 		build_tab()
 
@@ -879,6 +927,8 @@ func refresh_hud() -> void:
 	if not game.initialized:
 		return
 	var ops: Dictionary = game.network_snapshot()
+	if follow_button != null:
+		follow_button.disabled = int(ops["routes"]) == 0
 	if brand_status != null:
 		if int(ops["routes"]) > 0:
 			brand_status.text = "✈ %s · LANDAR OM %d S" % [str(ops["next_airport"]), int(ops["next_seconds"])]

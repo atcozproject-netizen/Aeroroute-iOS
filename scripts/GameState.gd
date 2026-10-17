@@ -327,6 +327,7 @@ func network_snapshot() -> Dictionary:
 	var average_load: float = 0.0
 	var next_landing_sec: float = 999999.0
 	var next_landing_code: String = ""
+	var next_route_id: String = ""
 	var best_route_id: String = ""
 	var weakest_route_id: String = ""
 	var strongest: float = -999999.0
@@ -350,13 +351,14 @@ func network_snapshot() -> Dictionary:
 		if remaining < next_landing_sec:
 			next_landing_sec = remaining
 			next_landing_code = str(r["to"]) if int(r.get("direction", 0)) == 0 else str(r["from"])
+			next_route_id = str(r["id"])
 		full_flights += 1
 	if full_flights > 0:
 		average_load /= float(full_flights)
 	return {"routes":full_flights,"net":rounded(net_per_rotation),
 		"loss_routes":risk_count,"load":roundi(average_load),
 		"next_seconds":ceili(next_landing_sec) if full_flights > 0 else -1,
-		"next_airport":next_landing_code,"best_id":best_route_id,"risk_id":weakest_route_id}
+		"next_airport":next_landing_code,"next_route_id":next_route_id,"best_id":best_route_id,"risk_id":weakest_route_id}
 
 func available_upgrades(r: Dictionary) -> Array:
 	var current: Dictionary = catalog_by_id.get(str(r["plane"]), {})

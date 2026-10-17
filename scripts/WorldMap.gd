@@ -4,12 +4,12 @@ extends Control
 signal airport_tapped(code: String)
 signal route_drafted(start_code: String, end_code: String)
 
-const SEA_TOP = Color("84b9c3")
-const SEA_BOTTOM = Color("84b9c3")
-const LAND_FILL = Color("e5ebde")
-const LAND_EDGE = Color("c5d6ce")
-const NODE_FREE = Color("37677a")
-const NODE_OWNED = Color("e6a271")
+const SEA_TOP = Color("72b8c7")
+const SEA_BOTTOM = Color("72b8c7")
+const LAND_FILL = Color("f1e6d1")
+const LAND_EDGE = Color("e4d7ba")
+const NODE_FREE = Color("265b70")
+const NODE_OWNED = Color("f2b777")
 const ROUTE_LINE = Color("de986d")
 const ROUTE_POSITIVE = Color("469787")
 const ROUTE_NEGATIVE = Color("cd8275")
@@ -58,6 +58,8 @@ var detailed_tile_draws: int = 0
 var reveal_route_id: String = ""
 var reveal_progress: float = 1.0
 var reveal_accumulator: float = 0.0
+var follow_route_id: String = ""
+var follow_accumulator: float = 0.0
 const REVEAL_SECONDS: float = 0.88
 
 # The iPhone must not process or label every airport at world scale.
@@ -273,6 +275,37 @@ func project(lon: float, lat: float) -> Vector2:
 func world_project_raw(lon: float, lat: float, shift: float = 0.0) -> Vector2:
 	return Vector2(size.x * 0.5 + (lon - camera_lon + shift) * projection_scale(), size.y * 0.5 - (lat - camera_lat) * projection_scale() * 1.17)
 
+func toggle_follow(route_id: String) -> bool:
+	if route_id == "" or game.get_route(route_id).is_empty():
+		follow_route_id = ""
+	else:
+		follow_route_id = "" if follow_route_id == route_id else route_id
+	follow_accumulator = 0.0
+	queue_redraw()
+	return follow_route_id != ""
+
+func center_on_followed_aircraft() -> void:
+	if follow_route_id == "":
+		return
+	var route: Dictionary = game.get_route(follow_route_id)
+	if route.is_empty():
+		follow_route_id = ""
+		return
+	var a: Dictionary = game.airport(str(route["from"]))
+	var b: Dictionary = game.airport(str(route["to"]))
+	if a.is_empty() or b.is_empty():
+		follow_route_id = ""
+		return
+	var t: float = clampf(float(route.get("progress", 0.0)), 0.0, 1.0)
+	if int(route.get("direction", 0)) == 1:
+		t = 1.0 - t
+	var start_lon: float = float(a["lon"])
+	var lon_delta: float = fposmod(float(b["lon"]) - start_lon + 180.0, 360.0) - 180.0
+	camera_lon = fposmod(start_lon + lon_delta * t + 180.0, 360.0) - 180.0
+	camera_lat = lerpf(float(a["lat"]), float(b["lat"]), t)
+	zoom = maxf(zoom, 10.0)
+	queue_redraw()
+
 func animate_new_route(route_id: String) -> void:
 	reveal_route_id = route_id
 	reveal_progress = 0.0
@@ -471,6 +504,7 @@ func pan(delta_pixels: Vector2) -> void:
 	queue_redraw()
 
 func handle_press(pos: Vector2) -> void:
+	follow_route_id = ""
 	pointer_down = true
 	pointer_start = pos
 	pointer_last = pos
@@ -536,6 +570,11 @@ func reset_gesture() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	if follow_route_id != "" and game != null and game.initialized:
+		follow_accumulator += delta
+		if follow_accumulator >= 0.065:
+			follow_accumulator = 0.0
+			center_on_followed_aircraft()
 	if reveal_progress < 1.0:
 		reveal_accumulator += delta
 		if reveal_accumulator >= 1.0 / 30.0:
