@@ -545,7 +545,7 @@ func _layout_for_size(view_size: Vector2) -> void:
 		return
 	var landscape: bool = view_size.x > view_size.y * 1.12
 	viewport_layout_mode = "landscape" if landscape else "portrait"
-	var cockpit_width: float = minf(420.0, view_size.x - 6.0) if landscape else view_size.x
+	var cockpit_width: float = minf(420.0, view_size.x * 0.55) if landscape else view_size.x
 	cockpit_background.anchor_right = 0.0 if landscape else 1.0
 	cockpit_background.offset_left = 8.0
 	cockpit_background.offset_right = cockpit_width - 8.0 if landscape else -8.0
@@ -567,7 +567,7 @@ func _layout_for_size(view_size: Vector2) -> void:
 		clock_dock.anchor_right = 1.0
 		clock_dock.anchor_top = 0.0
 		clock_dock.anchor_bottom = 0.0
-		clock_dock.offset_left = -326.0
+		clock_dock.offset_left = -minf(326.0, view_size.x * 0.43)
 		clock_dock.offset_right = -12.0
 		clock_dock.offset_top = 13.0
 		clock_dock.offset_bottom = 74.0
@@ -587,8 +587,8 @@ func _layout_for_size(view_size: Vector2) -> void:
 	if quote_card != null:
 		quote_card.anchor_top = 0.0 if landscape else 1.0
 		quote_card.anchor_bottom = 0.0 if landscape else 1.0
-		quote_card.offset_top = 91.0 if landscape else -260.0
-		quote_card.offset_bottom = 151.0 if landscape else -204.0
+		quote_card.offset_top = 126.0 if landscape else -260.0
+		quote_card.offset_bottom = 185.0 if landscape else -204.0
 	if sheet != null:
 		if landscape:
 			sheet.anchor_left = 1.0
