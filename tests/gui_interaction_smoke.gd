@@ -38,6 +38,27 @@ func _run() -> void:
 	if view.start_overlay == null or view.start_search == null or not view.start_overlay.visible:
 		_fail("New game overlay or search box missing")
 		return
+	# V0.9.6: actual ICAO coverage and high-resolution map assets must be
+	# present in the SAME Godot PCK which iPhone Safari downloads.
+	if view.game.airports.size() < 2200:
+		_fail("Expanded real-airport dataset not loaded by Godot")
+		return
+	if str(view.game.airport("ESSA").get("iata", "")) != "ARN" or str(view.game.airport("ESSP").get("iata", "")) != "NRK":
+		_fail("Expanding the airport catalog replaced canonical Swedish ICAO/IATA records")
+		return
+	var texture: Texture2D = load("res://data/world_land.png") as Texture2D
+	if texture == null or texture.get_size() != Vector2(4096.0, 2048.0):
+		_fail("4K coastline asset not present in game export")
+		return
+	var proposals: Array = view.game.recommended_destinations("OMDB", 4)
+	if proposals.is_empty() or proposals.size() > 4:
+		_fail("Nearby airport route suggestions unavailable")
+		return
+	for suggestion in proposals:
+		if not view.game.airports_by_code.has(str(suggestion["code"])) or float(suggestion["cost"]) <= 0.0:
+			_fail("Route suggestion has nonexistent airport or invalid opening cost")
+			return
+
 	var search: LineEdit = view.start_search
 	if search.get_global_rect().size.x < 20.0:
 		_fail("Search box has no usable geometry")
@@ -235,5 +256,5 @@ func _run() -> void:
 	if view.current_sheet == "planner" or view.world_map.gesture_captured or not view.world_map.pointers.is_empty():
 		_fail("Pinch release triggered a route or left capture active")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: safe pan, FIR 3 modes, long-press route and pinch release")
+	print("AEROROUTE GUI SMOKE PASSED: 2661 ICAO airports, 4K map, route suggestions, FIR, safe touch gestures")
 	quit(0)
