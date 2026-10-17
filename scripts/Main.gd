@@ -30,7 +30,7 @@ var cockpit_top: VBoxContainer
 var clock_dock: PanelContainer
 var quote_card: PanelContainer
 var quote_label: Label
-var layout_mode: String = "portrait"
+var viewport_layout_mode: String = "portrait"
 var hud: PanelContainer
 var hud_balance: Label
 var hud_routes: Label
@@ -520,7 +520,7 @@ func _layout_for_size(view_size: Vector2) -> void:
 	if cockpit_background == null or clock_dock == null or nav_bar == null:
 		return
 	var landscape: bool = view_size.x > view_size.y * 1.12
-	layout_mode = "landscape" if landscape else "portrait"
+	viewport_layout_mode = "landscape" if landscape else "portrait"
 	var cockpit_width: float = minf(420.0, view_size.x - 6.0) if landscape else view_size.x
 	cockpit_background.anchor_right = 0.0 if landscape else 1.0
 	cockpit_background.offset_right = cockpit_width if landscape else 0.0

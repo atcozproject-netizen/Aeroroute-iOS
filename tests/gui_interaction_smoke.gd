@@ -621,14 +621,14 @@ func _run() -> void:
 
 	# Both orientations use one real responsive map, not a rotated/scaled copy.
 	view._layout_for_size(Vector2(844.0, 390.0))
-	if view.layout_mode != "landscape" or view.clock_dock.anchor_top != 0.0:
+	if view.viewport_layout_mode != "landscape" or view.clock_dock.anchor_top != 0.0:
 		_fail("Landscape HUD did not move flight controls away from bottom map")
 		return
 	if view.nav_bar.anchor_right != 0.0 or view.sheet.anchor_left != 1.0:
 		_fail("Landscape navigation/modal geometry invalid")
 		return
 	view._layout_for_size(Vector2(390.0, 844.0))
-	if view.layout_mode != "portrait" or view.clock_dock.anchor_top != 1.0:
+	if view.viewport_layout_mode != "portrait" or view.clock_dock.anchor_top != 1.0:
 		_fail("Portrait controls failed to restore")
 		return
 	view.refresh_hud()

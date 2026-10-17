@@ -76,6 +76,14 @@ jobs:
           html=p.read_text()
           html=html.replace('width=device-width, user-scalable=no, initial-scale=1.0',
                             'width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no')
+          responsive_css = """
+          <style id="aeroroute-responsive-game">
+            html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
+            #canvas { display: block; touch-action: none; }
+            body { background: #72b8c7; }
+          </style>
+          """
+          html=html.replace('</head>',responsive_css+'</head>')
           p.write_text(html)
           PY
 
