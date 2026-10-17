@@ -558,6 +558,7 @@ func _draft_route(from: String, to: String) -> void:
 	route_mode = false
 	if route_mode_button != null:
 		route_mode_button.set_pressed_no_signal(false)
+		route_mode_button.text = "+ NY LINJE"
 	route_origin = ""
 	world_map.route_origin = ""
 	world_map.queue_redraw()
@@ -785,6 +786,7 @@ func show_tab(tab: String) -> void:
 		world_map.route_origin = ""
 		if route_mode_button != null:
 			route_mode_button.set_pressed_no_signal(false)
+			route_mode_button.text = "+ NY LINJE"
 	update_map_status()
 	for key in tab_buttons:
 		var nav_button: Button = tab_buttons[key]

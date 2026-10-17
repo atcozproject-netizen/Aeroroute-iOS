@@ -429,11 +429,21 @@ func _run() -> void:
 		_fail("Touching the map failed to stop automatic flight tracking")
 		return
 	view.world_map.reset_gesture()
-	if view.route_mode_button.text.find("LINJE") < 0:
-		_fail("Primary create-route button missing")
+	if view.route_mode_button.text != "+ NY LINJE":
+		_fail("Primary action failed to reset after leaving route mode")
+		return
+	_click(view.route_mode_button.get_global_rect().get_center())
+	await process_frame
+	if not view.route_mode or not view.world_map.route_draw_enabled:
+		_fail("Touching floating route button does not enable route planning")
+		return
+	view.route_mode_button.button_pressed = false
+	await process_frame
+	if view.route_mode:
+		_fail("Toggling route action off did not return to map navigation")
 		return
 	if view.game.routes.size() != 1:
 		_fail("Cockpit redesign unexpectedly changed route model")
 		return
-		print("AEROROUTE GUI SMOKE PASSED: cockpit redesign, follow aircraft, safe map input and real airline economics")
+	print("AEROROUTE GUI SMOKE PASSED: cockpit redesign, follow aircraft, safe map input and real airline economics")
 	quit(0)
