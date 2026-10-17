@@ -214,6 +214,11 @@ func create_scene() -> void:
 	var brand_row: HBoxContainer = row(9)
 	top.add_child(brand_row)
 	var logo_box: PanelContainer = add_styled_panel(Color("255b69"), 12)
+	var logo_style: StyleBoxFlat = logo_box.get_theme_stylebox("panel") as StyleBoxFlat
+	logo_style.content_margin_left = 4
+	logo_style.content_margin_right = 4
+	logo_style.content_margin_top = 3
+	logo_style.content_margin_bottom = 3
 	logo_box.custom_minimum_size = Vector2(40, 40)
 	brand_row.add_child(logo_box)
 	var mark: Label = label("A", 21, Color("e7b88a"), true)
@@ -223,7 +228,9 @@ func create_scene() -> void:
 	var brand_text: VBoxContainer = stack(0)
 	brand_row.add_child(expanded(brand_text))
 	brand_text.add_child(label("AEROROUTE", 17, Color("fff9e8"), true))
-	brand_status = label("DIN VÄRLD. DITT FLYGBOLAG.", 9, Color("a8ccd0"))
+	brand_status = label("FLYGOPERATIVT", 9, Color("a8ccd0"))
+	brand_status.autowrap_mode = TextServer.AUTOWRAP_OFF
+	brand_status.clip_text = true
 	brand_text.add_child(brand_status)
 	var search_btn: Button = button("SÖK", false)
 	search_btn.custom_minimum_size = Vector2(43, 40)
@@ -931,9 +938,9 @@ func refresh_hud() -> void:
 		follow_button.disabled = int(ops["routes"]) == 0
 	if brand_status != null:
 		if int(ops["routes"]) > 0:
-			brand_status.text = "✈ %s · LANDAR OM %d S" % [str(ops["next_airport"]), int(ops["next_seconds"])]
+			brand_status.text = "✈ %s  ·  %d S" % [str(ops["next_airport"]), int(ops["next_seconds"])]
 		else:
-			brand_status.text = "DRA LINJER · BYGG ETT FLYGNÄT"
+			brand_status.text = "BYGG DITT FLYGNÄT"
 	hud_balance.text = game.money(game.cash)
 	hud_routes.text = str(game.routes.size())
 	hud_passengers.text = str(game.total_passengers)

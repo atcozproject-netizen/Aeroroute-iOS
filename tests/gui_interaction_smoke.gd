@@ -402,7 +402,7 @@ func _run() -> void:
 	await process_frame
 	var header_height: float = view.hud.get_global_rect().end.y
 	if header_height >= 135.0:
-		_fail("Cockpit dashboard still blocks too much of the map")
+		_fail("Cockpit dashboard still blocks too much of the map (end_y: %.1f)" % header_height)
 		return
 	if view.route_mode_button.get_parent() == view.zoom_buttons:
 		_fail("Create-line game action is still buried among zoom controls")
