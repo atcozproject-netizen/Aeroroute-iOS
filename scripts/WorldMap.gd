@@ -109,15 +109,76 @@ func airport_min_rank() -> int:
 
 func airport_label_text(airport: Dictionary) -> String:
 	var code: String = str(airport.get("icao", ""))
-	if zoom < 17.0:
-		return code
-	var iata: String = str(airport.get("iata", ""))
-	if zoom < 30.0:
-		return code + (" · " + iata if iata != "" else "")
-	var full_name: String = str(airport.get("name", code)).strip_edges()
-	if full_name.length() > 25:
-		full_name = full_name.substr(0, 24).strip_edges() + "…"
-	return code + " · " + full_name
+	# A map is not a table: unselected airports always display a short code.
+	# Detailed names remain available in the airport info panel.
+	if code == focused_airport and zoom >= 29.0:
+		var name_text: String = str(airport.get("name", code)).strip_edges()
+		if name_text.length() > 20:
+			name_text = name_text.substr(0, 19).strip_edges() + "…"
+		return code + " · " + name_text
+	return code
+
+func airport_label_budget() -> int:
+	if zoom < 6.0:
+		return 3
+	if zoom < 15.0:
+		return 4
+	if zoom < 35.0:
+		return 5
+	return 6
+
+func airport_label_priority(item: Dictionary) -> int:
+	var code: String = str(item["code"])
+	if bool(item["focused"]):
+		return 500
+	if bool(item["owned"]):
+		return 400
+	for r in game.routes:
+		if str(r["from"]) == code or str(r["to"]) == code:
+			return 300
+	return int(item["airport"]["rank"]) * 10
+
+func label_candidates(pins: Array) -> Array:
+	# Sorting and collision checks happen only when the map redraws.
+	var eligible: Array = []
+	for item in pins:
+		var rank: int = int(item["airport"]["rank"])
+		var important: bool = bool(item["focused"]) or bool(item["owned"])
+		var threshold: bool = (zoom >= 5.0 and rank >= 7) or (zoom >= 12.0 and rank >= 5) or (zoom >= 23.0 and rank >= 3) or zoom >= 45.0
+		if important or threshold:
+			eligible.append(item)
+	eligible.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return airport_label_priority(a) > airport_label_priority(b)
+	)
+	var picked: Array = []
+	var rects: Array[Rect2] = []
+	var limit: int = airport_label_budget()
+	for item in eligible:
+		if picked.size() >= limit:
+			break
+		var p: Vector2 = item["position"]
+		if p.y < 174.0 or p.y > size.y - 170.0:
+			continue
+		var value: String = airport_label_text(item["airport"])
+		var label_size: int = 11
+		var tx: Vector2 = p + Vector2(10.0, -4.0)
+		var w: float = ThemeDB.fallback_font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
+		var rect: Rect2 = Rect2(tx.x - 3.0, tx.y - 13.0, w + 9.0, 20.0)
+		if rect.position.x < 9.0 or rect.end.x > size.x - 12.0:
+			continue
+		# Keep space for the zoom/FIR/route controls on the right.
+		if rect.end.x > size.x - 76.0 and rect.position.y < 545.0:
+			continue
+		var collides: bool = false
+		for prev in rects:
+			if rect.grow(10.0).intersects(prev.grow(10.0)):
+				collides = true
+				break
+		if collides:
+			continue
+		rects.append(rect)
+		picked.append({"text":value, "pos":tx, "rect":rect, "focused":bool(item["focused"]), "owned":bool(item["owned"])})
+	return picked
 
 func candidate_airports() -> Array:
 	if game == null:
@@ -215,10 +276,11 @@ func _draw() -> void:
 			draw_polyline(arc, ROUTE_GLOW, 5.0, true)
 			draw_polyline(arc, ROUTE_LINE, 1.9, true)
 
-	# Level-of-detail + collision avoidance. No overlap jungle on iPhone.
-	var placed_labels: Array[Rect2] = []
+	# Render every appropriate airport marker, but VERY FEW labels.
+	# Tap any dot for the full airport name, country and route actions.
+	var pins: Array = candidate_airports()
 	visible_pin_codes.clear()
-	for item in candidate_airports():
+	for item in pins:
 		var code: String = str(item["code"])
 		visible_pin_codes[code] = true
 		var p: Vector2 = item["position"]
@@ -234,29 +296,11 @@ func _draw() -> void:
 		draw_circle(p, radius, NODE_OWNED if owned else NODE_FREE)
 		if owned and zoom > 7.0:
 			draw_circle(p, 1.5, Color("fff0cf"))
-		var show_label: bool = owned or focused or (zoom >= 4.0 and rank >= 7) or (zoom >= 7.5 and rank >= 5) or (zoom >= 12.0 and rank >= 3) or (zoom >= 20.0 and rank >= 2) or zoom >= 29.0
-		if not show_label or p.y < 150.0 or p.y > size.y - 145.0:
-			continue
-		var label_value: String = airport_label_text(item["airport"])
-		var label_size: int = 11 if zoom < 30.0 else 12
-		var tx: Vector2 = p + Vector2(8.0, -4.5)
-		var measured_width: float = ThemeDB.fallback_font.get_string_size(label_value, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
-		var label_bounds: Rect2 = Rect2(tx.x - 3.0, tx.y - 13.0, measured_width + 6.0, 20.0)
-		if label_bounds.end.x > size.x - 8.0 or tx.x < 0.0:
-			continue
-		var can_draw: bool = true
-		for previous in placed_labels:
-			if previous.intersects(label_bounds):
-				can_draw = false
-				break
-		if not can_draw:
-			continue
-		placed_labels.append(label_bounds)
-		# At high zoom, small airports get a clean and readable ICAO+name
-		# label. Before that, ICAO or IATA is enough.
-		if zoom >= 30.0:
-			draw_rect(label_bounds.grow(2.0), Color(0.96, 0.98, 0.96, 0.88))
-		draw_string(ThemeDB.fallback_font, tx, label_value, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size, Color("315764"))
+	for item in label_candidates(pins):
+		var tx: Vector2 = item["pos"]
+		if bool(item["focused"]):
+			draw_rect(item["rect"].grow(2.0), Color(0.97, 0.98, 0.95, 0.94))
+		draw_string(ThemeDB.fallback_font, tx, str(item["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("315764"))
 
 	var origin: String = pointer_from if pointer_down and gesture_kind == "route" and pointer_from != "" else route_origin
 	if origin != "" and game.airports_by_code.has(origin):
