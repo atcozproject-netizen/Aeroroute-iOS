@@ -11,6 +11,9 @@ const LAND_EDGE = Color("c5d6ce")
 const NODE_FREE = Color("37677a")
 const NODE_OWNED = Color("e6a271")
 const ROUTE_LINE = Color("de986d")
+const ROUTE_POSITIVE = Color("469787")
+const ROUTE_NEGATIVE = Color("cd8275")
+const ROUTE_NEUTRAL = Color("d5a777")
 const ROUTE_GLOW = Color(1.0, 0.83, 0.64, 0.29)
 const OWNED_HALO = Color(0.98, 0.75, 0.52, 0.21)
 const LAND_TEXTURE: Texture2D = preload("res://data/world_land.png")
@@ -52,6 +55,10 @@ var map_revision: int = 0
 var detail_tile_cache: Dictionary = {}
 var detail_tile_recent: Array[String] = []
 var detailed_tile_draws: int = 0
+var reveal_route_id: String = ""
+var reveal_progress: float = 1.0
+var reveal_accumulator: float = 0.0
+const REVEAL_SECONDS: float = 0.88
 
 # The iPhone must not process or label every airport at world scale.
 # A static world-map LOD is computed only once, not on every pan frame.
@@ -266,6 +273,23 @@ func project(lon: float, lat: float) -> Vector2:
 func world_project_raw(lon: float, lat: float, shift: float = 0.0) -> Vector2:
 	return Vector2(size.x * 0.5 + (lon - camera_lon + shift) * projection_scale(), size.y * 0.5 - (lat - camera_lat) * projection_scale() * 1.17)
 
+func animate_new_route(route_id: String) -> void:
+	reveal_route_id = route_id
+	reveal_progress = 0.0
+	reveal_accumulator = 0.0
+	queue_redraw()
+
+func route_visual_color(route: Dictionary) -> Color:
+	var estimate: Dictionary = game.projected(route)
+	if estimate.is_empty():
+		return ROUTE_NEUTRAL
+	var net: float = float(estimate["net"])
+	if net < -1.0:
+		return ROUTE_NEGATIVE
+	if net > 1.0:
+		return ROUTE_POSITIVE
+	return ROUTE_NEUTRAL
+
 func _draw() -> void:
 	# Smooth premium strategy-board palette. No stripes, grids or video-sized shaders.
 	draw_rect(Rect2(Vector2.ZERO,size), SEA_TOP, true)
@@ -283,9 +307,17 @@ func _draw() -> void:
 
 	for r in game.routes:
 		var arc: PackedVector2Array = route_points(str(r["from"]), str(r["to"]))
-		if arc.size() >= 2:
-			draw_polyline(arc, ROUTE_GLOW, 5.0, true)
-			draw_polyline(arc, ROUTE_LINE, 1.9, true)
+		if arc.size() < 2:
+			continue
+		var color: Color = route_visual_color(r)
+		if str(r["id"]) == reveal_route_id and reveal_progress < 1.0:
+			var steps: int = clampi(ceili(float(arc.size()) * reveal_progress), 2, arc.size())
+			arc = arc.slice(0, steps)
+		var halo: Color = Color(color.r, color.g, color.b, 0.18)
+		draw_polyline(arc, halo, 4.4, true)
+		draw_polyline(arc, color, 2.0, true)
+		if str(r["id"]) == reveal_route_id and reveal_progress < 1.0:
+			draw_circle(arc[arc.size() - 1], 4.7, Color(1.0, 0.94, 0.76, 0.89))
 
 	# Render every appropriate airport marker, but VERY FEW labels.
 	# Tap any dot for the full airport name, country and route actions.
@@ -504,6 +536,14 @@ func reset_gesture() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	if reveal_progress < 1.0:
+		reveal_accumulator += delta
+		if reveal_accumulator >= 1.0 / 30.0:
+			reveal_progress = minf(1.0, reveal_progress + reveal_accumulator / REVEAL_SECONDS)
+			reveal_accumulator = 0.0
+			if reveal_progress >= 1.0:
+				reveal_route_id = ""
+			queue_redraw()
 	if gesture_captured and Time.get_ticks_msec() - last_touch_event_ms > 8500:
 		reset_gesture()
 		return

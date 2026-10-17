@@ -299,12 +299,51 @@ func projected(r: Dictionary) -> Dictionary:
 			bonus *= float(e.get("multiplier", 1.0))
 	var demand: float = float(market["base"]) / 9.5 * hub_bonus * (1.0 + marketing * 0.075) * (1.0 + service * 0.035) * price_factor * bonus
 	var seats: int = int(p["seats"])
-	var pax: float = minf(float(seats), maxf(0.0, rounded(demand * 10.0) / 10.0))
+	var pax: float = minf(float(seats), maxf(0.0, demand))
 	var revenue: float = rounded(pax * float(r["fare"]))
 	var cost: float = rounded(2.0 + int(p["level"]) * 1.4 + seats * 0.055 + dist * 0.0018 * (1.0 + int(p["level"]) * 0.2) + marketing * 0.10 + service * 0.07 + staffing * 0.05)
 	return {"demand": demand, "pax": pax, "seats": seats, "revenue": revenue,
 		"cost": cost, "net": rounded(revenue - cost), "load": roundi(100.0 * pax / maxf(1.0, float(seats))), "bonus": bonus,
 		"label": str(market["label"]), "distance": dist}
+
+func network_snapshot() -> Dictionary:
+	# Informational network analytics; no XP requirements or hard objectives.
+	var net_per_rotation: float = 0.0
+	var full_flights: int = 0
+	var risk_count: int = 0
+	var average_load: float = 0.0
+	var next_landing_sec: float = 999999.0
+	var next_landing_code: String = ""
+	var best_route_id: String = ""
+	var weakest_route_id: String = ""
+	var strongest: float = -999999.0
+	var weakest: float = 999999.0
+	for r in routes:
+		var projection: Dictionary = projected(r)
+		if projection.is_empty():
+			continue
+		var profit: float = float(projection["net"])
+		net_per_rotation += profit
+		average_load += float(projection["load"])
+		if profit < 0.0:
+			risk_count += 1
+		if profit > strongest:
+			strongest = profit
+			best_route_id = str(r["id"])
+		if profit < weakest:
+			weakest = profit
+			weakest_route_id = str(r["id"])
+		var remaining: float = (1.0 - float(r.get("progress", 0.0))) * flight_duration(r) / maxf(0.5, speed)
+		if remaining < next_landing_sec:
+			next_landing_sec = remaining
+			next_landing_code = str(r["to"]) if int(r.get("direction", 0)) == 0 else str(r["from"])
+		full_flights += 1
+	if full_flights > 0:
+		average_load /= float(full_flights)
+	return {"routes":full_flights,"net":rounded(net_per_rotation),
+		"loss_routes":risk_count,"load":roundi(average_load),
+		"next_seconds":ceili(next_landing_sec) if full_flights > 0 else -1,
+		"next_airport":next_landing_code,"best_id":best_route_id,"risk_id":weakest_route_id}
 
 func available_upgrades(r: Dictionary) -> Array:
 	var current: Dictionary = catalog_by_id.get(str(r["plane"]), {})

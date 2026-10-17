@@ -29,6 +29,7 @@ var hud: PanelContainer
 var hud_balance: Label
 var hud_routes: Label
 var hud_passengers: Label
+var brand_status: Label
 var clock_label: Label
 var play_button: Button
 var nav_bar: PanelContainer
@@ -221,7 +222,8 @@ func create_scene() -> void:
 	var brand_text: VBoxContainer = stack(0)
 	brand_row.add_child(expanded(brand_text))
 	brand_text.add_child(label("AEROROUTE", 18, INK, true))
-	brand_text.add_child(label("AIRLINE EMPIRE", 10, Color("608892")))
+	brand_status = label("DIN VÄRLD. DITT FLYGBOLAG.", 10, Color("608892"))
+	brand_text.add_child(brand_status)
 	var search_btn: Button = button("SÖK", false)
 	search_btn.custom_minimum_size = Vector2(53, 43)
 	search_btn.tooltip_text = "Sök flygplats"
@@ -607,7 +609,7 @@ func show_planner(from: String, to: String) -> void:
 		if result != "":
 			toast(result)
 		else:
-			world_map.queue_redraw()
+			world_map.animate_new_route(game.route_key(from, to))
 			show_route(game.route_key(from, to))
 			toast("Flyglinjen är öppnad!")
 	)
@@ -753,14 +755,36 @@ func build_tab() -> void:
 			content_body.add_child(label("DINA FLYGLINJER", 24, INK, true))
 			content_body.add_child(label("%d flygningar  ·  Senaste resultat: %s" % [game.total_flights, game.money(game.last_profit)], 12, MUTED))
 			content_body.add_child(label("%d linjer · %d flygplatser" % [game.routes.size(), game.owned.size()], 13, MUTED))
+			var report: Dictionary = game.network_snapshot()
+			var situation: PanelContainer = add_styled_panel(Color("e5f1eb"), 14)
+			content_body.add_child(situation)
+			var situation_text: VBoxContainer = stack(4)
+			situation.add_child(situation_text)
+			situation_text.add_child(label("LIVE · FLYGOPERATIVT", 11, Color("56837c"), true))
+			if int(report["routes"]) > 0:
+				situation_text.add_child(label("%s netto per flygomgång" % game.money(float(report["net"])), 18, INK, true))
+				situation_text.add_child(label("%d%% förväntad beläggning · %d olönsamma linjer" % [int(report["load"]), int(report["loss_routes"])], 12, MUTED))
+				situation_text.add_child(label("Nästa landning: %s om %d sek" % [str(report["next_airport"]), int(report["next_seconds"])], 12, MUTED))
+			else:
+				situation_text.add_child(label("Ditt nätverk väntar på första flygningen", 13, INK))
 			for r in game.routes:
 				var projection: Dictionary = game.projected(r)
-				var b: Button = button("%s - %s   %s / flyg" % [r["from"], r["to"], game.money(float(projection["net"]))], false)
+				var net: float = float(projection["net"])
+				var icon_text: String = "↑" if net > 0.0 else "↓" if net < 0.0 else "•"
+				var b: Button = button("%s %s → %s  %s" % [icon_text, r["from"], r["to"], game.money(net)], false)
 				content_body.add_child(b)
 				var id: String = str(r["id"])
 				b.pressed.connect(func() -> void: show_route(id))
 			if game.routes.is_empty():
-				content_body.add_child(label("Dra mellan två flygplatser på kartan för att öppna din första linje.", 15, MUTED))
+				content_body.add_child(label("Tryck LINJE på kartan, välj två flygplatser och starta ditt nätverk.", 15, MUTED))
+			content_body.add_child(line_break())
+			content_body.add_child(label("RUTTRADAR · NÄSTA MÖJLIGHETER", 11, MUTED, true))
+			for idea in game.recommended_destinations(game.home, 3):
+				var choice_code: String = str(idea["code"])
+				var opening_cost: float = float(idea["cost"])
+				var suggestion: Button = button("%s · %d km · %s" % [choice_code, roundi(float(idea["km"])), game.money(opening_cost)], false)
+				content_body.add_child(suggestion)
+				suggestion.pressed.connect(func() -> void: show_planner(game.home, choice_code))
 			var map_btn: Button = button("+ NY LINJE PÅ KARTAN")
 			content_body.add_child(map_btn)
 			map_btn.pressed.connect(func() -> void: show_tab("map"))
@@ -843,6 +867,12 @@ func _toggle_pause() -> void:
 func refresh_hud() -> void:
 	if not game.initialized:
 		return
+	var ops: Dictionary = game.network_snapshot()
+	if brand_status != null:
+		if int(ops["routes"]) > 0:
+			brand_status.text = "✈ %s · LANDAR OM %d S" % [str(ops["next_airport"]), int(ops["next_seconds"])]
+		else:
+			brand_status.text = "DRA LINJER · BYGG ETT FLYGNÄT"
 	hud_balance.text = game.money(game.cash)
 	hud_routes.text = str(game.routes.size())
 	hud_passengers.text = str(game.total_passengers)
