@@ -299,8 +299,7 @@ func create_scene() -> void:
 		world_map.reset_gesture()
 		update_map_status()
 	)
-	# FIR geometry is built into the Godot package and can be switched off.
-	fir_layer.set_fir_visible(true)
+	# FIR is enabled after the HUD and notification labels have been created.
 
 
 	var bottom_controls: PanelContainer = add_styled_panel(Color("fffcf4"), 16)
@@ -396,6 +395,7 @@ func create_scene() -> void:
 	map_status.offset_bottom = -169.0
 	map_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(map_status)
+	fir_layer.set_fir_visible(true)
 	update_map_status()
 
 func map_gesture_active() -> bool:

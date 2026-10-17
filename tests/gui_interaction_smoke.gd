@@ -92,5 +92,26 @@ func _run() -> void:
 	if view.profit_layer.effects.size() < 2 or not str(view.profit_layer.effects[1]["amount"]).contains("8.5"):
 		_fail("Negative flight income did not animate")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: touch input, search, positive and negative landing animation")
+	if not view.fir_layer.loaded or not view.fir_layer.enabled or view.fir_layer.regions.size() < 200:
+		_fail("FIR display is not loaded and enabled with worldwide regions")
+		return
+	if view.route_mode_button == null:
+		_fail("Dedicated route mode toggle missing")
+		return
+	view.route_mode_button.button_pressed = true
+	await process_frame
+	if not view.route_mode:
+		_fail("Route-mode button did not enable")
+		return
+	view._airport_tapped("OMDB")
+	await process_frame
+	if view.route_origin != "OMDB" or view.world_map.route_origin != "OMDB":
+		_fail("First selected airport is not held as route origin")
+		return
+	view._airport_tapped("EGLL")
+	await process_frame
+	if view.current_sheet != "planner" or view.route_mode or view.route_origin != "":
+		_fail("Two airport selections did not open route planner and clear gesture mode")
+		return
+	print("AEROROUTE GUI SMOKE PASSED: interface, actual profit, FIR boundaries, two-airport route planner")
 	quit(0)
