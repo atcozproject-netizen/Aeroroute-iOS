@@ -530,7 +530,7 @@ func show_airport(code: String) -> void:
 	heading("FLYGPLATS", code, str(a["name"]) + " · " + str(a["country"]))
 	var tiles: HBoxContainer = row(7)
 	sheet_body.add_child(tiles)
-	tiles.add_child(info_tile("EFTERFRÅGAN", "Nivå %d" % int(a["rank"])))
+	tiles.add_child(info_tile("MARKNAD", game.airport_market_class(code)))
 	tiles.add_child(info_tile("LINJER", str(game.gates_used(code))))
 	tiles.add_child(info_tile("TERMINAL", str(game.terminals.get(code, 1))))
 	var new_line: Button = button("+ NY FLYGLINJE")
@@ -767,6 +767,17 @@ func build_tab() -> void:
 				situation_text.add_child(label("Nästa landning: %s om %d sek" % [str(report["next_airport"]), int(report["next_seconds"])], 12, MUTED))
 			else:
 				situation_text.add_child(label("Ditt nätverk väntar på första flygningen", 13, INK))
+			# Player-visible operating opportunities, not XP quests.
+			for active_event in game.route_events:
+				if int(active_event.get("ends", 0)) <= game.day:
+					continue
+				var event_airport: String = str(active_event.get("airport", ""))
+				var event_title: String = str(active_event.get("title", "Trafikökning"))
+				var extra_demand: int = roundi((float(active_event.get("multiplier", 1.0)) - 1.0) * 100.0)
+				var days_left: int = int(active_event["ends"]) - game.day
+				var event_card: Button = button("★ %s · %s  +%d%%  (%d dagar)" % [event_title, event_airport, extra_demand, days_left], false)
+				content_body.add_child(event_card)
+				event_card.pressed.connect(func() -> void: show_airport(event_airport))
 			for r in game.routes:
 				var projection: Dictionary = game.projected(r)
 				var net: float = float(projection["net"])

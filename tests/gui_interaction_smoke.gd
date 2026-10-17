@@ -352,5 +352,49 @@ func _run() -> void:
 	if not visible_small:
 		_fail("A searched small airport must remain focused at regional zoom")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: commercial airports, crisp coastline tiles, no progression, routes, touch and FIR")
+	# V1.0 must reflect actual economics rather than a tenfold forecasting bug.
+	var model: Dictionary = view.game.initial_plane("ESSA", "ESSP")
+	if model.is_empty():
+		_fail("No short-haul aircraft available for realistic flight simulation")
+		return
+	var route_id: String = view.game.route_key("ESSA", "ESSP")
+	var synthetic: Dictionary = {"id":route_id,"from":"ESSA","to":"ESSP",
+		"plane":str(model["id"]),"fare":1.25,"progress":0.40,"direction":0}
+	view.game.routes.append(synthetic)
+	var forecast: Dictionary = view.game.projected(synthetic)
+	if forecast.is_empty():
+		_fail("Network forecast unavailable")
+		return
+	var forecast_passengers: float = minf(float(forecast["seats"]), maxf(0.0, float(forecast["demand"])))
+	if absf(float(forecast["pax"]) - forecast_passengers) > 0.02:
+		_fail("Forecast passenger count differs from actual flight passenger basis")
+		return
+	var report: Dictionary = view.game.network_snapshot()
+	if int(report["routes"]) != 1 or int(report["next_seconds"]) <= 0 or str(report["next_airport"]) != "ESSP":
+		_fail("Live operations snapshot did not identify the next arrival")
+		return
+	if absf(float(report["net"]) - float(forecast["net"])) > 0.02:
+		_fail("Operations dashboard does not reflect actual projected route net")
+		return
+	view.world_map.animate_new_route(route_id)
+	if view.world_map.reveal_progress >= 1.0 or view.world_map.reveal_route_id != route_id:
+		_fail("New airline route did not start its reveal animation")
+		return
+	view.world_map._process(0.2)
+	if view.world_map.reveal_progress <= 0.0:
+		_fail("New airline route animation is not advancing")
+		return
+	if not view.flight_layer.has_method("draw_flight_trail") or not view.flight_layer.has_method("point_on_route"):
+		_fail("Aircraft contrail animation missing")
+		return
+	view.show_tab("routes")
+	await process_frame
+	var operational_text: String = ""
+	for candidate in view.content_body.find_children("*", "Label", true, false):
+		if candidate is Label:
+			operational_text += candidate.text + " "
+	if not operational_text.contains("FLYGOPERATIVT") or not operational_text.contains("Nästa landning"):
+		_fail("Live network briefing is missing from routes screen")
+		return
+		print("AEROROUTE GUI SMOKE PASSED: commercial airports, crisp coastline tiles, no progression, living economics, flight trails and ops briefing")
 	quit(0)

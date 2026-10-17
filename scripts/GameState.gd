@@ -140,6 +140,19 @@ func distance_label(a_code: String, b_code: String) -> String:
 	var km: float = kilometers(a_code, b_code)
 	return "%d NM  ·  %d km" % [roundi(km / 1.852), roundi(km)]
 
+func airport_market_class(code: String) -> String:
+	var a: Dictionary = airport(code)
+	if a.is_empty():
+		return "Okänd marknad"
+	var rank: int = int(a["rank"])
+	if rank >= 7:
+		return "Globalt nav"
+	if rank >= 5:
+		return "Stark internationell"
+	if rank >= 3:
+		return "Regional"
+	return "Mindre marknad"
+
 func demand_market(a_code: String, b_code: String) -> Dictionary:
 	var a: Dictionary = airport(a_code)
 	var b: Dictionary = airport(b_code)
@@ -464,7 +477,7 @@ func new_event() -> void:
 		{"title": "Internationell mässa", "multiplier": 1.7, "days": 2}
 	]
 	var event: Dictionary = possibilities.pick_random()
-	route_events.append({"airport": dest, "ends": day + int(event["days"]), "multiplier": event["multiplier"]})
+	route_events.append({"airport": dest, "title": event["title"], "ends": day + int(event["days"]), "multiplier": event["multiplier"]})
 	news.emit(str(event["title"]), "%s: efterfrågan stiger under %d speldagar." % [dest, int(event["days"])])
 	save_game()
 
