@@ -76,5 +76,21 @@ func _run() -> void:
 	if not view.game.initialized:
 		_fail("Tapping start company button did not begin game")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: search, airport selection and start-company clicks")
+	if view.profit_layer == null:
+		_fail("Profit effect layer missing")
+		return
+	view.game.landed.emit("TEST", 8, 37.50)
+	await process_frame
+	if not view.profit_layer.has_active_profit():
+		_fail("Landing signal did not animate profit")
+		return
+	if not str(view.profit_layer.effects[0]["amount"]).contains("+37.5"):
+		_fail("Profit animation does not show actual net")
+		return
+	view.game.landed.emit("TEST", 3, -8.50)
+	await process_frame
+	if view.profit_layer.effects.size() < 2 or not str(view.profit_layer.effects[1]["amount"]).contains("8.5"):
+		_fail("Negative flight income did not animate")
+		return
+	print("AEROROUTE GUI SMOKE PASSED: touch input, search, positive and negative landing animation")
 	quit(0)

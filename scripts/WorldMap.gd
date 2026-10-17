@@ -11,6 +11,8 @@ const LAND_EDGE = Color("cdd8c9")
 const NODE_FREE = Color("547e8a")
 const NODE_OWNED = Color("da9673")
 const ROUTE_LINE = Color("df9b70")
+const ROUTE_GLOW = Color(0.98, 0.77, 0.60, 0.21)
+const OWNED_HALO = Color(0.98, 0.75, 0.52, 0.21)
 const LAND_TEXTURE: Texture2D = preload("res://data/world_land.png")
 
 var game
@@ -171,11 +173,11 @@ func _draw() -> void:
 	for latitude in range(-75, 76, 15):
 		var yy: float = size.y * 0.5 - (float(latitude) - camera_lat) * sc * 1.17
 		if yy >= 0.0 and yy <= size.y:
-			draw_line(Vector2(0.0, yy), Vector2(size.x, yy), Color(1, 1, 1, .16), 0.7, true)
+			draw_line(Vector2(0.0, yy), Vector2(size.x, yy), Color(1, 1, 1, .10), 0.7, true)
 	for longitude in range(-180, 181, 30):
 		var xx: float = project(float(longitude), 0.0).x
 		if xx >= 0.0 and xx <= size.x:
-			draw_line(Vector2(xx, 0.0), Vector2(xx, size.y), Color(1, 1, 1, .14), 0.7, true)
+			draw_line(Vector2(xx, 0.0), Vector2(xx, size.y), Color(1, 1, 1, .09), 0.7, true)
 
 	# Draw each visible section of a pre-rendered land texture. With this
 	# technique the full continents draw correctly regardless of winding,
@@ -186,7 +188,8 @@ func _draw() -> void:
 	for r in game.routes:
 		var arc: PackedVector2Array = route_points(str(r["from"]), str(r["to"]))
 		if arc.size() >= 2:
-			draw_polyline(arc, ROUTE_LINE, 2.0, true)
+			draw_polyline(arc, ROUTE_GLOW, 5.0, true)
+			draw_polyline(arc, ROUTE_LINE, 1.9, true)
 
 	# Level-of-detail + collision avoidance. No overlap jungle on iPhone.
 	var placed_labels: Array[Rect2] = []
@@ -198,8 +201,14 @@ func _draw() -> void:
 		var owned: bool = bool(item["owned"])
 		var rank: int = int(item["airport"]["rank"])
 		var radius: float = (4.1 if zoom < 8.0 else 4.6) + (1.2 if owned else 0.0)
-		draw_circle(p, radius + 1.45, Color(1.0, 1.0, 1.0, .91))
+		if owned:
+			draw_circle(p, radius + 6.0, OWNED_HALO)
+		elif rank >= 7 and zoom >= 5.0:
+			draw_circle(p, radius + 3.0, Color(1.0, 1.0, 1.0, 0.14))
+		draw_circle(p, radius + 1.45, Color(1.0, 1.0, 1.0, .94))
 		draw_circle(p, radius, NODE_OWNED if owned else NODE_FREE)
+		if owned and zoom > 7.0:
+			draw_circle(p, 1.5, Color("fff0cf"))
 		var show_label: bool = owned or (zoom >= 4.0 and rank >= 7) or (zoom >= 7.5 and rank >= 5) or (zoom >= 11.0 and rank >= 3)
 		if not show_label or p.y < 142.0 or p.y > size.y - 133.0:
 			continue

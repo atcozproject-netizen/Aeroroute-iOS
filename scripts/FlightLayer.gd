@@ -36,9 +36,9 @@ func _draw() -> void:
 			direction = -direction
 		if pos.x < -15.0 or pos.x > size.x + 15.0 or pos.y < -15.0 or pos.y > size.y + 15.0:
 			continue
-		draw_airplane(pos, direction)
+		draw_airplane(pos, direction, route)
 
-func draw_airplane(pos: Vector2, heading: Vector2) -> void:
+func draw_airplane(pos: Vector2, heading: Vector2, route: Dictionary) -> void:
 	# Small crisp swept-wing silhouette, no bitmap/pixel upscaling.
 	var geometry := PackedVector2Array([
 		Vector2(11, 0), Vector2(3.5, -1.8), Vector2(-2.2, -8.5),
@@ -53,5 +53,12 @@ func draw_airplane(pos: Vector2, heading: Vector2) -> void:
 	for pt in geometry:
 		body.append(pos + pt.rotated(angle) * 0.72)
 		outline.append(pos + pt.rotated(angle) * 0.80)
+	# Low-cost jet wake and navigation lights; no particle systems.
+	var aft: Vector2 = pos - heading * 8.0
+	draw_line(aft - heading * 8.0, aft, Color(1.0, 1.0, 1.0, 0.17), 2.0, true)
 	draw_colored_polygon(outline, Color("fff9e9"))
 	draw_colored_polygon(body, Color("285767"))
+	draw_circle(pos + Vector2(-1.2, -6.0).rotated(angle) * 0.72, 1.35, Color("e68d7a"))
+	draw_circle(pos + Vector2(-1.2, 6.0).rotated(angle) * 0.72, 1.35, Color("83c4ad"))
+	if int(route.get("level", 1)) >= 4:
+		draw_circle(aft, 1.4, Color(1.0, 0.81, 0.60, 0.75))

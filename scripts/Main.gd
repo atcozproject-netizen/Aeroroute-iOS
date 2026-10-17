@@ -5,6 +5,7 @@ const StateScript = preload("res://scripts/GameState.gd")
 const MapScript = preload("res://scripts/WorldMap.gd")
 const FlightScript = preload("res://scripts/FlightLayer.gd")
 const FirScript = preload("res://scripts/FirLayer.gd")
+const ProfitScript = preload("res://scripts/ProfitEffects.gd")
 const PAPER = Color("fffdf5")
 const INK = Color("254853")
 const MUTED = Color("7f9a9d")
@@ -17,6 +18,9 @@ var world_map
 var flight_layer
 var fir_layer
 var fir_button: Button
+var profit_layer: Control
+var balance_tween: Tween
+var toast_tween: Tween
 var hud: PanelContainer
 var hud_balance: Label
 var hud_routes: Label
@@ -72,6 +76,8 @@ func add_styled_panel(color: Color, radius: int = 20) -> PanelContainer:
 	s.content_margin_right = 15
 	s.content_margin_top = 13
 	s.content_margin_bottom = 13
+	s.shadow_color = Color(0.10, 0.19, 0.20, 0.09)
+	s.shadow_size = 4
 	p.add_theme_stylebox_override("panel", s)
 	return p
 
@@ -94,6 +100,8 @@ func button(text: String, filled: bool = true) -> Button:
 	b.add_theme_color_override("font_hover_color", PAPER if filled else DARK)
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = DARK if filled else Color("e7f0eb")
+	normal.shadow_size = 2
+	normal.shadow_color = Color(0.10, 0.19, 0.20, 0.08)
 	normal.corner_radius_top_left = 12
 	normal.corner_radius_top_right = 12
 	normal.corner_radius_bottom_left = 12
@@ -110,6 +118,15 @@ func button(text: String, filled: bool = true) -> Button:
 	var disabled: StyleBoxFlat = normal.duplicate()
 	disabled.bg_color = Color("bfcfcb")
 	b.add_theme_stylebox_override("disabled", disabled)
+	b.button_down.connect(func() -> void:
+		b.pivot_offset = b.size * 0.5
+		var feedback: Tween = create_tween()
+		feedback.tween_property(b, "scale", Vector2(0.97, 0.97), 0.07)
+	)
+	b.button_up.connect(func() -> void:
+		var feedback: Tween = create_tween()
+		feedback.tween_property(b, "scale", Vector2.ONE, 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	)
 	return b
 
 func line_break() -> HSeparator:
@@ -169,6 +186,11 @@ func create_scene() -> void:
 	flight_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	flight_layer.setup(game, world_map)
 	add_child(flight_layer)
+	profit_layer = ProfitScript.new()
+	profit_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	profit_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(profit_layer)
+	profit_layer.setup(game, world_map)
 
 	var top: VBoxContainer = stack(10)
 	top.anchor_right = 1.0
@@ -588,6 +610,7 @@ func _search_updated(query: String) -> void:
 		var item: Button = button("%s   %s" % [code, str(a["name"])], false)
 		search_results.add_child(item)
 		item.pressed.connect(func() -> void:
+			search_line.release_focus()
 			close_sheet()
 			show_tab("map")
 			world_map.center_on(code)
@@ -740,10 +763,30 @@ func _on_game_changed() -> void:
 	world_map.queue_redraw()
 
 func _on_landed(route_id: String, count: int, net: float) -> void:
+	var route: Dictionary = game.get_route(route_id)
+	var airport_code: String = ""
+	if active_tab == "map" and current_sheet.is_empty() and not route.is_empty():
+		airport_code = str(route["to"]) if int(route.get("direction", 1)) == 1 else str(route["from"])
+	profit_layer.show_landing(airport_code, net, count)
+	pulse_balance(net)
 	if current_sheet == "route" and current_route == route_id:
 		show_route(route_id)
 	if active_tab == "routes" or active_tab == "company":
 		build_tab()
+
+func pulse_balance(net: float) -> void:
+	if hud_balance == null:
+		return
+	if balance_tween != null and balance_tween.is_running():
+		balance_tween.kill()
+	hud_balance.scale = Vector2.ONE
+	hud_balance.modulate = Color.WHITE
+	hud_balance.pivot_offset = hud_balance.size * 0.5
+	balance_tween = create_tween()
+	balance_tween.tween_property(hud_balance, "modulate", Color("258368") if net >= 0.0 else Color("ae6450"), 0.14)
+	balance_tween.parallel().tween_property(hud_balance, "scale", Vector2(1.08, 1.08), 0.14)
+	balance_tween.chain().tween_property(hud_balance, "modulate", Color.WHITE, 0.27)
+	balance_tween.parallel().tween_property(hud_balance, "scale", Vector2.ONE, 0.27).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _on_news(title: String, info: String) -> void:
 	toast(title + ": " + info)
@@ -756,11 +799,15 @@ func _process(delta: float) -> void:
 		refresh_hud()
 
 func toast(message: String) -> void:
+	if toast_tween != null and toast_tween.is_running():
+		toast_tween.kill()
 	active_toast.text = message
 	active_toast.visible = true
-	var tween := create_tween()
-	tween.tween_interval(2.5)
-	tween.tween_callback(func() -> void: active_toast.visible = false)
+	active_toast.modulate.a = 1.0
+	toast_tween = create_tween()
+	toast_tween.tween_interval(2.1)
+	toast_tween.tween_property(active_toast, "modulate:a", 0.0, 0.30)
+	toast_tween.tween_callback(func() -> void: active_toast.visible = false)
 
 func show_start() -> void:
 	start_overlay = ColorRect.new()
@@ -827,6 +874,7 @@ func _update_start_choices(search_text: String) -> void:
 		start_choices.add_child(b)
 		b.pressed.connect(func() -> void:
 			start_choice_code = code
+			start_search.release_focus()
 			toast("Startflygplats: " + code)
 		)
 
