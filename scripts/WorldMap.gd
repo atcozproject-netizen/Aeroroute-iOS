@@ -628,11 +628,12 @@ var last_touch_event_ms: int = 0
 var touch_was_pinch: bool = false
 
 func reset_gesture() -> void:
+	var was_preview: bool = preview_destination != "" or gesture_kind == "route"
 	pointers.clear()
 	gesture_kind = "idle"
 	hold_elapsed = 0.0
 	touch_was_pinch = false
-	if preview_destination != "" or gesture_kind == "route":
+	if was_preview:
 		clear_route_preview()
 	pointer_down = false
 	pointer_from = ""

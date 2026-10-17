@@ -605,12 +605,13 @@ func _run() -> void:
 	view.world_map.zoom = 19.0
 	await process_frame
 	var from_point: Vector2 = view.world_map.project(float(view.game.airport("ESSA")["lon"]), float(view.game.airport("ESSA")["lat"]))
-	var dest_point: Vector2 = view.world_map.project(float(view.game.airport("ESMS")["lon"]), float(view.game.airport("ESMS")["lat"]))
+	var dest_point: Vector2 = view.world_map.project(float(view.game.airport("EKCH")["lon"]), float(view.game.airport("EKCH")["lat"]))
 	view.world_map.handle_press(from_point)
-	view.world_map._process(0.26)
+	view.world_map._process(0.14)
+	view.world_map._process(0.14)
 	view.world_map.handle_motion(dest_point)
 	await process_frame
-	if not view.quote_card.visible or not view.quote_label.text.contains("ESSA → ESMS"):
+	if not view.quote_card.visible or not view.quote_label.text.contains("ESSA → EKCH"):
 		_fail("Moving finger from one airport to another did not preview its cost")
 		return
 	view.world_map.reset_gesture()
