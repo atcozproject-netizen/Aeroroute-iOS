@@ -174,6 +174,7 @@ func create_scene() -> void:
 	add_child(world_map)
 	world_map.configure(game)
 	world_map.airport_tapped.connect(_airport_tapped)
+	world_map.route_tapped.connect(_route_tapped)
 	world_map.route_drafted.connect(_draft_route)
 	fir_layer = FirScript.new()
 	fir_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -502,6 +503,7 @@ func open_sheet(sheet_type: String) -> void:
 
 func close_sheet() -> void:
 	current_sheet = ""
+	world_map.focused_route_id = ""
 	shade.visible = false
 	sheet.visible = false
 	flight_eta = null
@@ -553,6 +555,13 @@ func _airport_tapped(code: String) -> void:
 		world_map.queue_redraw()
 		show_airport(code)
 
+func _route_tapped(route_id: String) -> void:
+	if not game.initialized or route_mode:
+		return
+	if game.get_route(route_id).is_empty():
+		return
+	show_plane_picker(route_id)
+
 func _draft_route(from: String, to: String) -> void:
 	world_map.route_draw_enabled = false
 	route_mode = false
@@ -572,18 +581,52 @@ func _draft_route(from: String, to: String) -> void:
 		show_planner(from, to)
 
 func show_airport(code: String) -> void:
-	var a: Dictionary = game.airport(code)
-	if a.is_empty():
+	var airport: Dictionary = game.airport(code)
+	if airport.is_empty():
 		return
 	current_code = code
+	world_map.focused_airport = code
+	world_map.focused_route_id = ""
+	world_map.queue_redraw()
 	open_sheet("airport")
-	heading("FLYGPLATS", code, str(a["name"]) + " · " + str(a["country"]))
-	var tiles: HBoxContainer = row(7)
-	sheet_body.add_child(tiles)
-	tiles.add_child(info_tile("MARKNAD", game.airport_market_class(code)))
-	tiles.add_child(info_tile("LINJER", str(game.gates_used(code))))
-	tiles.add_child(info_tile("TERMINAL", str(game.terminals.get(code, 1))))
-	var new_line: Button = button("+ NY FLYGLINJE")
+	heading("FLYGPLATS", code, str(airport["name"]) + " · " + str(airport["country"]))
+	var connected: Array = game.connected_routes(code)
+	var is_owned: bool = game.owned.has(code)
+	if is_owned:
+		var terminal_level: int = int(game.terminals.get(code, 1))
+		var capacity: int = 2 + terminal_level * 2
+		sheet_body.add_child(label("%d/%d flyglinjer anslutna  ·  Terminal %d" % [connected.size(), capacity, terminal_level], 13, MUTED))
+		var upgrade_cost: float = game.terminal_upgrade_price(code)
+		var upgrade_text: String = "✓ MAXIMAL KAPACITET" if upgrade_cost < 0.0 else "⬆ UPPGRADERA FLYGPLATS  ·  %s" % game.money(upgrade_cost)
+		var upgrade: Button = button(upgrade_text, true)
+		upgrade.disabled = upgrade_cost < 0.0 or game.cash < upgrade_cost
+		sheet_body.add_child(upgrade)
+		upgrade.pressed.connect(func() -> void:
+			var error: String = game.upgrade_terminal(code)
+			if error != "":
+				toast(error)
+			else:
+				show_airport(code)
+				toast("Terminalen är uppgraderad")
+		)
+	else:
+		sheet_body.add_child(label(game.airport_market_class(code), 13, MUTED))
+	if not connected.is_empty():
+		sheet_body.add_child(line_break())
+		sheet_body.add_child(label("VÄLJ EN LINJE FÖR ATT BYTA FLYGPLAN" if connected.size() > 1 else "FLYGPLAN PÅ DIN LINJE", 12, MUTED, true))
+		for r in connected:
+			var id: String = str(r["id"])
+			var destination: String = str(r["to"]) if str(r["from"]) == code else str(r["from"])
+			var model: Dictionary = game.catalog_by_id.get(str(r["plane"]), {})
+			var title: String = "%s  ↔  %s" % [code, destination]
+			var route_button: Button = button("%s   ›   %s" % [title, str(model.get("name", "Flygplan"))], false)
+			route_button.custom_minimum_size.y = 52.0
+			sheet_body.add_child(route_button)
+			route_button.pressed.connect(func() -> void: show_plane_picker(id))
+	else:
+		sheet_body.add_child(label("Inga anslutna linjer ännu.", 13, MUTED))
+	sheet_body.add_child(line_break())
+	var new_line: Button = button("+ NY LINJE FRÅN " + code, false)
 	sheet_body.add_child(new_line)
 	new_line.pressed.connect(func() -> void:
 		close_sheet()
@@ -593,39 +636,55 @@ func show_airport(code: String) -> void:
 		world_map.route_draw_enabled = true
 		if route_mode_button != null:
 			route_mode_button.set_pressed_no_signal(true)
+			route_mode_button.text = "✓ VÄLJ 2 PLATSER"
 		world_map.queue_redraw()
 		update_map_status()
-		toast("Välj en destinationsflygplats")
+		toast("Välj destinationsflygplats")
 	)
-	if game.owned.has(code):
-		var upgrade: Button = button("UPPGRADERA TERMINAL", false)
-		sheet_body.add_child(upgrade)
-		upgrade.pressed.connect(func() -> void:
-			var msg: String = game.upgrade_terminal(code)
-			if msg != "":
-				toast(msg)
-			else:
-				show_airport(code)
-		)
-	for r in game.routes:
-		if str(r["from"]) == code or str(r["to"]) == code:
-			var rt: Button = button("%s - %s" % [r["from"], r["to"]], false)
-			sheet_body.add_child(rt)
-			var id: String = str(r["id"])
-			rt.pressed.connect(func() -> void: show_route(id))
-	var opportunities: Array = game.recommended_destinations(code, 4)
-	if not opportunities.is_empty():
-		sheet_body.add_child(line_break())
-		sheet_body.add_child(label("FÖRSLAG PÅ NYA LINJER", 12, MUTED, true))
-		for idea in opportunities:
-			var to_code: String = str(idea["code"])
-			var cost: float = float(idea["cost"])
-			var advice: String = "%s  ·  %d km  ·  %s" % [to_code, roundi(float(idea["km"])), game.money(cost)]
-			var suggest: Button = button(advice, false)
-			suggest.tooltip_text = "Förväntad efterfrågan: %s" % str(idea["demand"])
-			sheet_body.add_child(suggest)
-			suggest.pressed.connect(func() -> void: show_planner(code, to_code))
 
+func show_plane_picker(route_id: String) -> void:
+	var route: Dictionary = game.get_route(route_id)
+	if route.is_empty():
+		close_sheet()
+		return
+	current_route = route_id
+	world_map.focused_route_id = route_id
+	world_map.queue_redraw()
+	open_sheet("aircraft")
+	heading("FLYGPLAN PÅ LINJEN", str(route["from"]) + " ↔ " + str(route["to"]), game.distance_label(str(route["from"]), str(route["to"])))
+	var current: Dictionary = game.catalog_by_id.get(str(route["plane"]), {})
+	var current_name: String = str(current.get("name", "Flygplan"))
+	sheet_body.add_child(label("NUVARANDE  ·  " + current_name, 15, INK, true))
+	var projected: Dictionary = game.projected(route)
+	if not projected.is_empty():
+		sheet_body.add_child(label("%d platser  ·  %d%% beläggning  ·  %s netto/flyg" % [int(projected["seats"]), int(projected["load"]), game.money(float(projected["net"]))], 12, MUTED))
+	sheet_body.add_child(line_break())
+	sheet_body.add_child(label("VÄLJ FLYGPLAN", 12, MUTED, true))
+	var km: float = game.kilometers(str(route["from"]), str(route["to"]))
+	for model in game.catalog:
+		var id: String = str(model["id"])
+		var existing: bool = id == str(route["plane"])
+		var valid_range: bool = float(model["range"]) >= km
+		var price: float = game.plane_change_price(route_id, id)
+		var affordable: bool = price <= game.cash
+		var money_label: String = "ANVÄNDS" if existing else "FÖR KORT RÄCKVIDD" if not valid_range else ("FÅ " + game.money(-price)) if price < 0.0 else ("BETALA " + game.money(price))
+		var text_value: String = "%s  ·  %d säten  ·  %s" % [str(model["name"]), int(model["seats"]), money_label]
+		var option: Button = button(text_value, existing)
+		option.custom_minimum_size.y = 47.0
+		option.disabled = existing or not valid_range or not affordable
+		sheet_body.add_child(option)
+		option.pressed.connect(func() -> void:
+			var result: String = game.change_plane(route_id, id)
+			if result != "":
+				toast(result)
+			else:
+				show_plane_picker(route_id)
+				toast("Flygplanet har bytts")
+		)
+	sheet_body.add_child(line_break())
+	var details: Button = button("BILJETTPRIS & LINJEDETALJER", false)
+	sheet_body.add_child(details)
+	details.pressed.connect(func() -> void: show_route(route_id))
 
 func show_planner(from: String, to: String) -> void:
 	open_sheet("planner")
@@ -701,22 +760,9 @@ func show_route(id: String) -> void:
 		fare_value.text = game.money(float(r["fare"]))
 		game.save_game()
 	)
-	var upgrades: Array = game.available_upgrades(r)
-	if not upgrades.is_empty():
-		sheet_body.add_child(label("UPPGRADERA FLYGPLAN", 11, MUTED, true))
-		for model in upgrades:
-			var upgrade_cost: float = maxf(0.0, game.rounded(float(model["price"]) - float(p["price"]) * 0.55))
-			var entry: Button = button("%s · %d platser · %s" % [model["name"], int(model["seats"]), game.money(upgrade_cost)], false)
-			entry.disabled = game.cash < upgrade_cost
-			sheet_body.add_child(entry)
-			var new_id: String = str(model["id"])
-			entry.pressed.connect(func() -> void:
-				var result: String = game.upgrade_plane(id, new_id)
-				if result == "":
-					show_route(id)
-				else:
-					toast(result)
-			)
+	var choose_aircraft: Button = button("BYT FLYGPLAN  ·  VISA ALLA MODELLER")
+	sheet_body.add_child(choose_aircraft)
+	choose_aircraft.pressed.connect(func() -> void: show_plane_picker(id))
 
 func show_search() -> void:
 	if not game.initialized:

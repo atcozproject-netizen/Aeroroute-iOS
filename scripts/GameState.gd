@@ -227,6 +227,54 @@ func recommended_destinations(from_code: String, limit: int = 4) -> Array:
 	proposals.sort_custom(func(a: Dictionary,b: Dictionary)->bool: return float(a["score"]) > float(b["score"]))
 	return proposals.slice(0, mini(limit, proposals.size()))
 
+func connected_routes(icao: String) -> Array:
+	var connected: Array = []
+	for r in routes:
+		if str(r["from"]) == icao or str(r["to"]) == icao:
+			connected.append(r)
+	return connected
+
+func terminal_upgrade_price(icao: String) -> float:
+	if not airports_by_code.has(icao) or not owned.has(icao):
+		return -1.0
+	var here: int = int(terminals.get(icao, 1))
+	if here >= 5:
+		return -1.0
+	return rounded((45.0 + float(airport(icao)["rank"]) * 17.5) * here)
+
+func plane_change_price(route_id: String, model_id: String) -> float:
+	var r: Dictionary = get_route(route_id)
+	var selected: Dictionary = catalog_by_id.get(model_id, {})
+	if r.is_empty() or selected.is_empty():
+		return 9999999.0
+	var current: Dictionary = catalog_by_id.get(str(r["plane"]), {})
+	if current.is_empty():
+		return 9999999.0
+	if model_id == str(r["plane"]):
+		return 0.0
+	# Full purchase price less realistic 55% trade-in credit. Downgrades
+	# refund only the difference, never the original purchase price.
+	return rounded(float(selected["price"]) - float(current["price"]) * 0.55)
+
+func change_plane(route_id: String, model_id: String) -> String:
+	var r: Dictionary = get_route(route_id)
+	var selected: Dictionary = catalog_by_id.get(model_id, {})
+	if r.is_empty() or selected.is_empty():
+		return "Okänd flyglinje eller flygplansmodell"
+	if model_id == str(r["plane"]):
+		return "Flygplanet används redan på linjen"
+	if float(selected["range"]) < kilometers(str(r["from"]), str(r["to"])):
+		return "Flygplanet har för kort räckvidd"
+	var price: float = plane_change_price(route_id, model_id)
+	if price > cash:
+		return "Otillräckligt med AirCredits"
+	cash = rounded(cash - price)
+	r["plane"] = model_id
+	r["progress"] = 0.0
+	save_game()
+	changed.emit()
+	return ""
+
 func gates_used(icao: String) -> int:
 	var count: int = 0
 	for r in routes:
@@ -395,7 +443,7 @@ func upgrade_terminal(icao: String) -> String:
 	var level_here: int = int(terminals.get(icao, 1))
 	if level_here >= 5:
 		return "Terminalen är på maxnivå"
-	var cost: float = rounded((45.0 + float(airport(icao)["rank"]) * 17.5) * level_here)
+	var cost: float = terminal_upgrade_price(icao)
 	if cash < cost:
 		return "Otillräckligt med AirCredits"
 	cash = rounded(cash - cost)

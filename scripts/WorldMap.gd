@@ -2,6 +2,7 @@ extends Control
 ## Native Godot CanvasItem world map: detailed vector coastlines, smooth touch controls.
 
 signal airport_tapped(code: String)
+signal route_tapped(route_id: String)
 signal route_drafted(start_code: String, end_code: String)
 
 const SEA_TOP = Color("72b8c7")
@@ -26,6 +27,7 @@ var camera_lon: float = 13.0
 var camera_lat: float = 52.0
 var zoom: float = 4.4
 var focused_airport: String = ""
+var focused_route_id: String = ""
 var route_origin: String = ""
 var pointer_start: Vector2 = Vector2.ZERO
 var pointer_last: Vector2 = Vector2.ZERO
@@ -346,9 +348,10 @@ func _draw() -> void:
 		if str(r["id"]) == reveal_route_id and reveal_progress < 1.0:
 			var steps: int = clampi(ceili(float(arc.size()) * reveal_progress), 2, arc.size())
 			arc = arc.slice(0, steps)
-		var halo: Color = Color(color.r, color.g, color.b, 0.18)
-		draw_polyline(arc, halo, 4.4, true)
-		draw_polyline(arc, color, 2.0, true)
+		var selected: bool = str(r["id"]) == focused_route_id
+		var halo: Color = Color(color.r, color.g, color.b, 0.31 if selected else 0.18)
+		draw_polyline(arc, halo, 9.0 if selected else 4.4, true)
+		draw_polyline(arc, Color("ffd499") if selected else color, 3.5 if selected else 2.0, true)
 		if str(r["id"]) == reveal_route_id and reveal_progress < 1.0:
 			draw_circle(arc[arc.size() - 1], 4.7, Color(1.0, 0.94, 0.76, 0.89))
 
@@ -473,6 +476,28 @@ func route_points(a_code: String, b_code: String) -> PackedVector2Array:
 		result.append(aa * pow(1.0 - t, 2) + 2.0 * (1.0 - t) * t * control + bb * t * t)
 	return result
 
+func nearest_route(pos: Vector2, radius: float = 17.0) -> String:
+	# Geometry-based line picking. Runs only on release, not while panning.
+	if game == null or game.routes.is_empty():
+		return ""
+	var best_id: String = ""
+	var best_dist_squared: float = radius * radius
+	for route in game.routes:
+		var arc: PackedVector2Array = route_points(str(route["from"]), str(route["to"]))
+		for i in range(1, arc.size()):
+			var a: Vector2 = arc[i - 1]
+			var b: Vector2 = arc[i]
+			var segment: Vector2 = b - a
+			var length_squared: float = segment.length_squared()
+			if length_squared < 0.01:
+				continue
+			var t: float = clampf((pos - a).dot(segment) / length_squared, 0.0, 1.0)
+			var dist_squared: float = pos.distance_squared_to(a + segment * t)
+			if dist_squared < best_dist_squared:
+				best_dist_squared = dist_squared
+				best_id = str(route["id"])
+	return best_id
+
 func nearest_airport(pos: Vector2, radius: float = 31.0) -> String:
 	if game == null:
 		return ""
@@ -546,9 +571,23 @@ func handle_release(pos: Vector2) -> void:
 		if target != "" and origin_code != "" and target != origin_code:
 			route_drafted.emit(origin_code, target)
 	elif was_tap:
-		var selected: String = nearest_airport(pos, 30.0)
+		# Airport dot wins close to the marker. Else the visible route line
+		# takes precedence, with a comfortable 17px hit corridor on iPhone.
+		var selected: String = nearest_airport(pos, 17.0)
 		if selected != "":
 			airport_tapped.emit(selected)
+		elif not route_draw_enabled:
+			var route_id: String = nearest_route(pos)
+			if route_id != "":
+				route_tapped.emit(route_id)
+			else:
+				selected = nearest_airport(pos, 29.0)
+				if selected != "":
+					airport_tapped.emit(selected)
+		else:
+			selected = nearest_airport(pos, 30.0)
+			if selected != "":
+				airport_tapped.emit(selected)
 	# Panning and canceled routes never open a route planner.
 	queue_redraw()
 
