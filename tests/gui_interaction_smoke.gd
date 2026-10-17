@@ -566,5 +566,74 @@ func _run() -> void:
 	if str(view.game.get_route(second_id)["plane"]) != str(second_model["id"]) or absf(view.game.cash - (cash_before_plane - swap_cost)) > 0.1:
 		_fail("Plane change affected another route or charged wrong amount")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: stable onboarding selection, no-scroll UI, instant route drawing, aircraft changes, terminal management and touch")
+	# V1.4 live costs are previewed BEFORE the gesture is released.
+	view.show_tab("map")
+	view.game.cash = 5000.0
+	var cost_quote: Dictionary = view.game.route_quote("ESSA", "ESMS")
+	if not bool(cost_quote["ok"]) or float(cost_quote["price"]) <= 0.0:
+		_fail("A real short-haul route should return a valid affordable quote")
+		return
+	if absf(float(cost_quote["price"]) - view.game.route_cost("ESSA", "ESMS")) > 0.01:
+		_fail("Preview cost must match the actual route charge")
+		return
+	view._update_route_quote(cost_quote)
+	await process_frame
+	if not view.quote_card.visible or not view.quote_label.text.contains(view.game.money(float(cost_quote["price"]))):
+		_fail("Route price HUD must show real price while dragging")
+		return
+	if not view.quote_label.text.contains("SALDO") or not view.quote_label.text.contains("DU HAR RÅD"):
+		_fail("Route price HUD missing wallet and green affordable state")
+		return
+	view.game.cash = 0.0
+	var poor_quote: Dictionary = view.game.route_quote("ESSA", "ESMS")
+	view._update_route_quote(poor_quote)
+	if bool(poor_quote["ok"]) or not view.quote_label.text.contains("Saknar"):
+		_fail("Cannot-afford cost must appear before touch release")
+		return
+	# Invalid routes must have actionable feedback, not a fabricated cost.
+	var too_long: Dictionary = view.game.route_quote("ESSA", "RJTT")
+	if bool(too_long["ok"]) or str(too_long["reason"]) == "":
+		_fail("Invalid route must carry a reason")
+		return
+	view._update_route_quote({})
+	if view.quote_card.visible:
+		_fail("Route cost tooltip must disappear when dragging ends")
+		return
+	view.game.cash = 9999.0
+	view.world_map.camera_lon = float(view.game.airport("ESSA")["lon"])
+	view.world_map.camera_lat = float(view.game.airport("ESSA")["lat"])
+	view.world_map.zoom = 19.0
+	await process_frame
+	var from_point: Vector2 = view.world_map.project(float(view.game.airport("ESSA")["lon"]), float(view.game.airport("ESSA")["lat"]))
+	var dest_point: Vector2 = view.world_map.project(float(view.game.airport("ESMS")["lon"]), float(view.game.airport("ESMS")["lat"]))
+	view.world_map.handle_press(from_point)
+	view.world_map._process(0.26)
+	view.world_map.handle_motion(dest_point)
+	await process_frame
+	if not view.quote_card.visible or not view.quote_label.text.contains("ESSA → ESMS"):
+		_fail("Moving finger from one airport to another did not preview its cost")
+		return
+	view.world_map.reset_gesture()
+	await process_frame
+	if view.quote_card.visible:
+		_fail("Canceled drag left stale quote overlay")
+		return
+
+	# Both orientations use one real responsive map, not a rotated/scaled copy.
+	view._layout_for_size(Vector2(844.0, 390.0))
+	if view.layout_mode != "landscape" or view.clock_dock.anchor_top != 0.0:
+		_fail("Landscape HUD did not move flight controls away from bottom map")
+		return
+	if view.nav_bar.anchor_right != 0.0 or view.sheet.anchor_left != 1.0:
+		_fail("Landscape navigation/modal geometry invalid")
+		return
+	view._layout_for_size(Vector2(390.0, 844.0))
+	if view.layout_mode != "portrait" or view.clock_dock.anchor_top != 1.0:
+		_fail("Portrait controls failed to restore")
+		return
+	view.refresh_hud()
+	if view.clock_label.text.begins_with("DAG"):
+		_fail("Internal event time must not appear as a visible day progression")
+		return
+	print("AEROROUTE GUI SMOKE PASSED: live route prices, affordability, no days, portrait/landscape UI, existing economy and touch")
 	quit(0)
