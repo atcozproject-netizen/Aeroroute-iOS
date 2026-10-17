@@ -100,6 +100,47 @@ func _run() -> void:
 	if view.profit_layer == null:
 		_fail("Profit effect layer missing")
 		return
+	# A map should NEVER draw every small-airport name at once, even zoomed in.
+	# Zoom level controls detail; selection controls whether a full name appears.
+	var map_for_labels: Control = view.world_map
+	map_for_labels.focused_airport = ""
+	map_for_labels.zoom = 36.0
+	var pins_for_labels: Array = map_for_labels.candidate_airports()
+	var labels_on_map: Array = map_for_labels.label_candidates(pins_for_labels)
+	if labels_on_map.size() > 6 or map_for_labels.airport_label_budget() > 6:
+		_fail("The iPhone map draws too many airport names at once")
+		return
+	for item in labels_on_map:
+		if str(item["text"]).length() > 9:
+			_fail("Unselected airport labels should use short ICAO codes")
+			return
+	map_for_labels.zoom = 9.0
+	if map_for_labels.label_candidates(map_for_labels.candidate_airports()).size() > 4:
+		_fail("Regional map is overcrowded with airport labels")
+		return
+	map_for_labels.zoom = 9.0
+	if view.goal_bar == null or view.goal_caption == null:
+		_fail("Airline goal progression is missing from HUD")
+		return
+	if view.goal_bar.max_value != 160.0:
+		_fail("First airline milestone target is incorrect")
+		return
+	view.game.total_passengers = 160
+	view.game.changed.emit()
+	await process_frame
+	if not view.level_effects.is_processing() or view.previous_level != 2:
+		_fail("Reaching passenger milestone did not trigger level-unlock animation")
+		return
+	if not view.goal_caption.text.contains("NIVÅ 2"):
+		_fail("Goal progress did not advance to next level")
+		return
+	view.game.total_passengers = 0
+	view.game.changed.emit()
+	await process_frame
+	if view.previous_level != 1 or view.goal_bar.value != 0.0:
+		_fail("Progress meter failed to reset for a new airline")
+		return
+
 	view.game.landed.emit("TEST", 8, 37.50)
 	await process_frame
 	if not view.profit_layer.has_active_profit():
@@ -282,6 +323,7 @@ func _run() -> void:
 		_fail("Minor airport does not appear at close zoom")
 		return
 	map.zoom = 42.0
+	map.focused_airport = "ESSP"
 	if not map.airport_label_text(small_airport).contains("Norrköping"):
 		_fail("Close zoom does not reveal real small-airport name")
 		return
@@ -305,5 +347,5 @@ func _run() -> void:
 	if not visible_small:
 		_fail("A searched small airport must remain focused at regional zoom")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: progressive small-airport LOD, 64x zoom, names, FIR, touch, economy")
+	print("AEROROUTE GUI SMOKE PASSED: decluttered labels, goal progression, level unlock, local zoom, FIR and touch")
 	quit(0)
