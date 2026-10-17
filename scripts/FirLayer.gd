@@ -2,9 +2,11 @@ extends Control
 ## FIR boundaries for Aeroroute; NOT authoritative AIS navigation data.
 signal fir_loaded(count: int)
 signal fir_load_failed(message: String)
-const FIR_URL: String = "https://hazel-cascade-4753.hosted.pageshare.ai/firs.json"
-const STROKE: Color = Color(0.31, 0.44, 0.65, 0.52)
-const LABEL: Color = Color(0.22, 0.34, 0.49, 0.92)
+const FIR_URL: String = ""
+const STROKE: Color = Color(0.66, 0.48, 0.80, 0.96)
+const FIR_GLOW: Color = Color(0.14, 0.12, 0.27, 0.35)
+const LABEL: Color = Color("382b54")
+const LABEL_BG: Color = Color(0.97, 0.94, 0.99, 0.95)
 var world_map
 var regions: Array = []
 var loaded: bool = false
@@ -21,6 +23,7 @@ func configure(map_control: Control) -> void:
 	http.request_completed.connect(_received)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_process(false)
+	visible = false
 
 func set_fir_visible(value: bool) -> void:
 	enabled = value
@@ -37,10 +40,10 @@ func load_firs() -> void:
 		if file != null:
 			parse_regions(file.get_as_text())
 			return
-	var err: Error = http.request(FIR_URL)
-	if err != OK:
-		loading = false
-		fir_load_failed.emit("Kunde inte hämta FIR-datan. Försök igen.")
+	# The actual worldwide dataset is bundled by the GitHub build. Do not rely
+	# on the former temporary PageShare URL (which can expire).
+	loading = false
+	fir_load_failed.emit("FIR-gränser saknas i spelpaketet.")
 
 func _received(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	loading = false
@@ -121,19 +124,26 @@ func _draw() -> void:
 				for coord in points:
 					if last_lon < 9000.0 and absf(coord.x - last_lon) > 180.0:
 						if poly.size() >= 2:
-							draw_polyline(poly, STROKE, 1.0, true)
+							draw_polyline(poly, STROKE, 1.65, true)
 						poly = PackedVector2Array()
 					last_lon = coord.x
 					poly.append(world_map.world_project_raw(coord.x, coord.y, offset))
 				if poly.size() >= 2:
-					draw_polyline(poly, STROKE, 1.0 if world_map.zoom < 7.5 else 1.4, true)
+					draw_polyline(poly, FIR_GLOW, 4.2 if world_map.zoom > 7.0 else 2.6, true)
+					draw_polyline(poly, STROKE, 1.65 if world_map.zoom < 7.5 else 2.1, true)
 			budget += points.size()
-		if world_map.zoom < 6.5:
+		if world_map.zoom < 4.3:
 			continue
 		var label_pos: Vector2 = world_map.project(float(region["lon"]), float(region["lat"]))
 		if label_pos.x < 24.0 or label_pos.x > size.x - 55.0 or label_pos.y < 180.0 or label_pos.y > size.y - 158.0:
 			continue
-		var box: Rect2 = Rect2(label_pos - Vector2(22, 9), Vector2(70, 20))
+		var title: String = str(region["code"]) + " FIR"
+		if world_map.zoom > 9.0:
+			title = str(region["name"])
+		var font: Font = ThemeDB.fallback_font
+		var font_size: int = 12 if world_map.zoom > 6.0 else 11
+		var text_width: float = minf(font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x, 158.0)
+		var box: Rect2 = Rect2(label_pos - Vector2(7, 19), Vector2(text_width + 17.0, 23.0))
 		var free: bool = true
 		for prev in labels:
 			if prev.intersects(box):
@@ -141,4 +151,6 @@ func _draw() -> void:
 				break
 		if free:
 			labels.append(box)
-			draw_string(ThemeDB.fallback_font, label_pos, str(region["code"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, LABEL)
+			draw_rect(box, LABEL_BG)
+			draw_rect(box, STROKE, false, 1.0, true)
+			draw_string(font, label_pos + Vector2(1.0, -3.0), title, HORIZONTAL_ALIGNMENT_LEFT, 150.0, font_size, LABEL)

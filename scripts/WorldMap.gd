@@ -4,14 +4,14 @@ extends Control
 signal airport_tapped(code: String)
 signal route_drafted(start_code: String, end_code: String)
 
-const SEA_TOP = Color("b9e0dd")
-const SEA_BOTTOM = Color("85bfca")
+const SEA_TOP = Color("345967")
+const SEA_BOTTOM = Color("4d7e89")
 const LAND_FILL = Color("f5f0df")
 const LAND_EDGE = Color("cdd8c9")
-const NODE_FREE = Color("547e8a")
-const NODE_OWNED = Color("da9673")
-const ROUTE_LINE = Color("df9b70")
-const ROUTE_GLOW = Color(0.98, 0.77, 0.60, 0.21)
+const NODE_FREE = Color("234e5c")
+const NODE_OWNED = Color("f1ae77")
+const ROUTE_LINE = Color("efbb8a")
+const ROUTE_GLOW = Color(1.0, 0.83, 0.64, 0.29)
 const OWNED_HALO = Color(0.98, 0.75, 0.52, 0.21)
 const LAND_TEXTURE: Texture2D = preload("res://data/world_land.png")
 
@@ -25,6 +25,7 @@ var pointer_last: Vector2 = Vector2.ZERO
 var pointer_down: bool = false
 var pointer_from: String = ""
 var pointer_moved: bool = false
+var drag_threshold: float = 10.0
 var temporary_line_end: Vector2 = Vector2.ZERO
 var pointers: Dictionary = {}
 var pinch_length: float = 0.0
@@ -163,21 +164,20 @@ func world_project_raw(lon: float, lat: float, shift: float = 0.0) -> Vector2:
 	return Vector2(size.x * 0.5 + (lon - camera_lon + shift) * projection_scale(), size.y * 0.5 - (lat - camera_lat) * projection_scale() * 1.17)
 
 func _draw() -> void:
-	var gradient_sections: int = 20
+	var gradient_sections: int = 12
 	for i in range(gradient_sections):
 		var t: float = float(i) / float(gradient_sections - 1)
 		draw_rect(Rect2(0.0, size.y * t, size.x, size.y / float(gradient_sections) + 1.0), SEA_TOP.lerp(SEA_BOTTOM, t), true)
 	if game == null:
 		return
 	var sc: float = projection_scale()
-	for latitude in range(-75, 76, 15):
-		var yy: float = size.y * 0.5 - (float(latitude) - camera_lat) * sc * 1.17
-		if yy >= 0.0 and yy <= size.y:
-			draw_line(Vector2(0.0, yy), Vector2(size.x, yy), Color(1, 1, 1, .10), 0.7, true)
-	for longitude in range(-180, 181, 30):
-		var xx: float = project(float(longitude), 0.0).x
-		if xx >= 0.0 and xx <= size.x:
-			draw_line(Vector2(xx, 0.0), Vector2(xx, size.y), Color(1, 1, 1, .09), 0.7, true)
+	# Play-oriented cartography: no Google-Earth-style coordinate grid.
+	# A quiet navigation sheen gives depth without additional textures or draw-heavy shaders.
+	var sheen: PackedVector2Array = PackedVector2Array()
+	for step in range(13):
+		var x: float = size.x * float(step) / 12.0
+		sheen.append(Vector2(x, size.y * 0.72 + sin(x / maxf(size.x, 1.0) * TAU) * 23.0))
+	draw_polyline(sheen, Color(1.0, 1.0, 1.0, 0.045), 1.0, true)
 
 	# Draw each visible section of a pre-rendered land texture. With this
 	# technique the full continents draw correctly regardless of winding,
@@ -205,7 +205,7 @@ func _draw() -> void:
 			draw_circle(p, radius + 6.0, OWNED_HALO)
 		elif rank >= 7 and zoom >= 5.0:
 			draw_circle(p, radius + 3.0, Color(1.0, 1.0, 1.0, 0.14))
-		draw_circle(p, radius + 1.45, Color(1.0, 1.0, 1.0, .94))
+		draw_circle(p, radius + 1.75, Color(1.0, 0.99, 0.94, .96))
 		draw_circle(p, radius, NODE_OWNED if owned else NODE_FREE)
 		if owned and zoom > 7.0:
 			draw_circle(p, 1.5, Color("fff0cf"))
@@ -224,14 +224,19 @@ func _draw() -> void:
 		if not can_draw:
 			continue
 		placed_labels.append(label_bounds)
-		draw_string(ThemeDB.fallback_font, tx, code, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("31535e"))
+		draw_string(ThemeDB.fallback_font, tx, code, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("213c48"))
 
-	if route_origin != "" and game.airports_by_code.has(route_origin):
-		var start: Dictionary = game.airport(route_origin)
+	var origin: String = pointer_from if pointer_down and pointer_from != "" else route_origin
+	if origin != "" and game.airports_by_code.has(origin):
+		var start: Dictionary = game.airport(origin)
 		var a_point: Vector2 = project(float(start["lon"]), float(start["lat"]))
-		if pointer_down:
-			draw_line(a_point, temporary_line_end, Color("e8a878"), 2.5, true)
-		draw_arc(a_point, 11.0, 0.0, TAU, 28, Color("d67c50"), 2.0, true)
+		if pointer_down and pointer_moved:
+			draw_line(a_point, temporary_line_end, Color(1.0, 0.94, 0.78, 0.19), 8.0, true)
+			draw_line(a_point, temporary_line_end, Color("ffd09b"), 2.8, true)
+			draw_circle(temporary_line_end, 6.0, Color("ffd09b"))
+		elif route_origin != "":
+			draw_arc(a_point, 14.0, 0.0, TAU, 30, Color("ffe6b6"), 2.7, true)
+		draw_arc(a_point, 19.0, 0.0, TAU, 30, Color(1.0, 0.87, 0.62, 0.29), 3.0, true)
 
 func draw_land_texture(sc: float) -> void:
 	if LAND_TEXTURE == null:
@@ -254,7 +259,7 @@ func draw_land_texture(sc: float) -> void:
 			continue
 		var src_x: float = (view_left - left) / world_w * tex_size.x
 		var src_w: float = (view_right - view_left) / world_w * tex_size.x
-		draw_texture_rect_region(LAND_TEXTURE, Rect2(view_left, visible_top, view_right-view_left, visible_bottom-visible_top), Rect2(src_x, src_y, src_w, src_h), Color.WHITE, false, true)
+		draw_texture_rect_region(LAND_TEXTURE, Rect2(view_left, visible_top, view_right-view_left, visible_bottom-visible_top), Rect2(src_x, src_y, src_w, src_h), Color("e1dfc9"), false, true)
 
 
 func route_points(a_code: String, b_code: String) -> PackedVector2Array:
@@ -273,7 +278,7 @@ func route_points(a_code: String, b_code: String) -> PackedVector2Array:
 		result.append(aa * pow(1.0 - t, 2) + 2.0 * (1.0 - t) * t * control + bb * t * t)
 	return result
 
-func nearest_airport(pos: Vector2, radius: float = 20.0) -> String:
+func nearest_airport(pos: Vector2, radius: float = 31.0) -> String:
 	if game == null:
 		return ""
 	var nearest: String = ""
@@ -307,14 +312,14 @@ func handle_press(pos: Vector2) -> void:
 	pointer_down = true
 	pointer_start = pos
 	pointer_last = pos
-	pointer_from = nearest_airport(pos)
+	pointer_from = nearest_airport(pos, 32.0)
 	pointer_moved = false
 	temporary_line_end = pos
 
 func handle_motion(pos: Vector2) -> void:
 	if not pointer_down:
 		return
-	if pointer_start.distance_to(pos) > 12.0:
+	if pointer_start.distance_to(pos) > drag_threshold:
 		pointer_moved = true
 	if pointer_moved and pointer_from == "" and route_origin == "":
 		pan(pos - pointer_last)
@@ -327,9 +332,13 @@ func handle_release(pos: Vector2) -> void:
 	if not pointer_down:
 		return
 	pointer_down = false
-	var destination: String = nearest_airport(pos, 25.0)
-	if pointer_from != "" and pointer_moved and destination != "" and destination != pointer_from:
-		route_drafted.emit(pointer_from, destination)
+	var destination: String = nearest_airport(pos, 33.0)
+	if pointer_from != "" and pointer_moved:
+		if destination != "" and destination != pointer_from:
+			route_drafted.emit(pointer_from, destination)
+		else:
+			# Preserve the source; user can tap the target instead of precisely dropping on a tiny point.
+			airport_tapped.emit(pointer_from)
 	elif route_origin != "" and destination != "" and destination != route_origin:
 		route_drafted.emit(route_origin, destination)
 	elif not pointer_moved and destination != "":

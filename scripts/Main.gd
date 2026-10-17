@@ -18,6 +18,9 @@ var world_map
 var flight_layer
 var fir_layer
 var fir_button: Button
+var route_mode_button: Button
+var route_mode: bool = false
+var map_status: Label
 var profit_layer: Control
 var balance_tween: Tween
 var toast_tween: Tween
@@ -180,6 +183,7 @@ func create_scene() -> void:
 		toast(message)
 	)
 	fir_layer.fir_loaded.connect(func(count: int) -> void:
+		update_map_status()
 		toast("FIR-gränser klara: %d" % count)
 	)
 	flight_layer = FlightScript.new()
@@ -277,14 +281,27 @@ func create_scene() -> void:
 	fir_button = button("FIR", false)
 	fir_button.custom_minimum_size = Vector2(48, 42)
 	fir_button.toggle_mode = true
-	fir_button.button_pressed = false
-	fir_button.tooltip_text = "Visa FIR-gränser på kartan (speldata)"
+	fir_button.button_pressed = true
+	fir_button.tooltip_text = "Visa eller dölj verklighetsbaserade FIR-gränser"
 	zoom_buttons.add_child(fir_button)
 	fir_button.toggled.connect(func(active: bool) -> void:
 		fir_layer.set_fir_visible(active)
-		if active and not fir_layer.loaded:
-			toast("Laddar FIR-gränser ...")
+		update_map_status()
 	)
+	route_mode_button = button("LINJE", false)
+	route_mode_button.toggle_mode = true
+	route_mode_button.custom_minimum_size = Vector2(48, 44)
+	zoom_buttons.add_child(route_mode_button)
+	route_mode_button.toggled.connect(func(active: bool) -> void:
+		route_mode = active
+		route_origin = ""
+		world_map.route_origin = ""
+		world_map.reset_gesture()
+		update_map_status()
+	)
+	# FIR geometry is built into the Godot package and can be switched off.
+	fir_layer.set_fir_visible(true)
+
 
 	var bottom_controls: PanelContainer = add_styled_panel(Color("fffcf4"), 16)
 	bottom_controls.anchor_left = 0.0
@@ -370,6 +387,16 @@ func create_scene() -> void:
 	active_toast.offset_bottom = -166
 	active_toast.visible = false
 	add_child(active_toast)
+	map_status = label("", 11, Color("fbf2e3"), true)
+	map_status.anchor_left = 0.0
+	map_status.anchor_top = 1.0
+	map_status.anchor_bottom = 1.0
+	map_status.offset_left = 17.0
+	map_status.offset_top = -189.0
+	map_status.offset_bottom = -169.0
+	map_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(map_status)
+	update_map_status()
 
 func map_gesture_active() -> bool:
 	return active_tab == "map" and game.initialized and not (
@@ -382,7 +409,7 @@ func map_can_interact(pos: Vector2) -> bool:
 		return false
 	if pos.y < 184.0 or pos.y > size.y - 156.0:
 		return false
-	if pos.x > size.x - 88.0 and pos.y >= 207.0 and pos.y <= 465.0:
+	if pos.x > size.x - 88.0 and pos.y >= 207.0 and pos.y <= 543.0:
 		return false
 	return true
 
@@ -431,18 +458,44 @@ func info_tile(title: String, value: String) -> PanelContainer:
 	v.add_child(label(value, 15, INK, true))
 	return panel
 
+func update_map_status() -> void:
+	if map_status == null:
+		return
+	if route_mode:
+		map_status.text = "LINJE: välj startflygplats" if route_origin == "" else ("FRÅN %s → välj destination" % route_origin)
+	elif fir_layer != null and fir_layer.enabled:
+		map_status.text = "FIR • %d regioner" % fir_layer.regions.size() if fir_layer.loaded else "FIR • laddar ..."
+	else:
+		map_status.text = "DRA MELLAN FLYGPLATSER FÖR NY LINJE"
+	map_status.visible = active_tab == "map" and game.initialized
+
 func _airport_tapped(code: String) -> void:
 	if not game.initialized:
 		return
+	if route_mode and route_origin == "":
+		route_origin = code
+		world_map.route_origin = code
+		update_map_status()
+		world_map.queue_redraw()
+		return
 	if route_origin != "" and code != route_origin:
 		_draft_route(route_origin, code)
+	elif route_mode and route_origin == code:
+		route_origin = ""
+		world_map.route_origin = ""
+		update_map_status()
+		world_map.queue_redraw()
 	else:
 		show_airport(code)
 
 func _draft_route(from: String, to: String) -> void:
+	route_mode = false
+	if route_mode_button != null:
+		route_mode_button.set_pressed_no_signal(false)
 	route_origin = ""
 	world_map.route_origin = ""
 	world_map.queue_redraw()
+	update_map_status()
 	if from == to:
 		return
 	var id: String = game.route_key(from, to)
@@ -469,7 +522,11 @@ func show_airport(code: String) -> void:
 		close_sheet()
 		route_origin = code
 		world_map.route_origin = code
+		route_mode = true
+		if route_mode_button != null:
+			route_mode_button.set_pressed_no_signal(true)
 		world_map.queue_redraw()
+		update_map_status()
 		toast("Välj en destinationsflygplats")
 	)
 	if game.owned.has(code):
@@ -633,6 +690,13 @@ func show_tab(tab: String) -> void:
 	flight_layer.visible = tab == "map"
 	get_node("ClockDock").visible = tab == "map"
 	zoom_buttons.visible = tab == "map"
+	if tab != "map":
+		route_mode = false
+		route_origin = ""
+		world_map.route_origin = ""
+		if route_mode_button != null:
+			route_mode_button.set_pressed_no_signal(false)
+	update_map_status()
 	for key in tab_buttons:
 		var nav_button: Button = tab_buttons[key]
 		nav_button.modulate = Color.WHITE
@@ -848,6 +912,7 @@ func show_start() -> void:
 			toast("Välj en flygplats med en möjlig startlinje inom 1100 km")
 			return
 		game.begin(start_choice_code)
+		update_map_status()
 		start_overlay.queue_free()
 		start_overlay = null
 		world_map.center_on(game.home)
