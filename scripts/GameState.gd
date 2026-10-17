@@ -10,6 +10,7 @@ const LEVEL_REQUIREMENTS = [0, 160, 950, 4000, 16000, 48000, 130000, 300000]
 
 var airports: Array = []
 var airports_by_code: Dictionary = {}
+var featured_codes: Dictionary = {}
 var catalog: Array = []
 var catalog_by_id: Dictionary = {}
 var land: Array = []
@@ -62,6 +63,15 @@ func _init() -> void:
 			airports.append(item)
 	for a in airports:
 		airports_by_code[str(a["icao"])] = a
+	var featured_data: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/airports_featured.json"))
+	if featured_data is Array:
+		for code in featured_data:
+			if airports_by_code.has(str(code)):
+				featured_codes[str(code)] = true
+	if featured_codes.is_empty():
+		push_warning("No curated airport data found. Falling back to canonical world data.")
+		for a in airports:
+			featured_codes[str(a["icao"])] = true
 	if plane_data is Array:
 		catalog = plane_data
 	for p in catalog:
@@ -69,12 +79,15 @@ func _init() -> void:
 	if land_data is Array:
 		land = land_data
 
+func is_featured(icao: String) -> bool:
+	return featured_codes.has(icao) or owned.has(icao) or icao == home and initialized
+
 func can_start_at(icao: String) -> bool:
-	if not airports_by_code.has(icao):
+	if not airports_by_code.has(icao) or not featured_codes.has(icao):
 		return false
 	for other in airports:
 		var code: String = str(other["icao"])
-		if code != icao and kilometers(icao, code) <= 1100.0:
+		if featured_codes.has(code) and code != icao and kilometers(icao, code) <= 1100.0:
 			return true
 	return false
 
@@ -103,16 +116,11 @@ func begin(icao: String) -> void:
 	changed.emit()
 
 func level() -> int:
-	var current: int = 1
-	for i in range(1, LEVEL_REQUIREMENTS.size()):
-		if total_passengers >= int(LEVEL_REQUIREMENTS[i]):
-			current = i + 1
-	return current
+	# Legacy compatibility: there is no player level progression anymore.
+	return 8
 
 func next_level_requirement() -> int:
-	if level() >= 8:
-		return -1
-	return int(LEVEL_REQUIREMENTS[level()])
+	return -1
 
 func airport(code: String) -> Dictionary:
 	return airports_by_code.get(code, {})
@@ -169,7 +177,7 @@ func demand_market(a_code: String, b_code: String) -> Dictionary:
 func initial_plane(a_code: String, b_code: String) -> Dictionary:
 	var km: float = kilometers(a_code, b_code)
 	for p in catalog:
-		if int(p["level"]) <= level() and float(p["range"]) >= km:
+		if float(p["range"]) >= km:
 			return p
 	return {}
 
@@ -187,7 +195,7 @@ func recommended_destinations(from_code: String, limit: int = 4) -> Array:
 	var proposals: Array = []
 	for other in airports:
 		var code: String = str(other["icao"])
-		if code == from_code or not get_route(route_key(from_code, code)).is_empty():
+		if not is_featured(code) or code == from_code or not get_route(route_key(from_code, code)).is_empty():
 			continue
 		var km: float = kilometers(from_code, code)
 		if km < 80.0 or km > 1100.0 or initial_plane(from_code, code).is_empty():
@@ -245,7 +253,7 @@ func create_route(a_code: String, b_code: String) -> String:
 		return "Linjen finns redan"
 	var plane: Dictionary = initial_plane(a_code, b_code)
 	if plane.is_empty():
-		return "Flygplansnivå med längre räckvidd krävs"
+		return "Ingen flygplansmodell har tillräcklig räckvidd"
 	if not gates_available(a_code) or not gates_available(b_code):
 		return "Uppgradera terminalkapaciteten först"
 	var fee: float = route_cost(a_code, b_code)
@@ -305,7 +313,7 @@ func available_upgrades(r: Dictionary) -> Array:
 	var result: Array = []
 	var dist: float = kilometers(str(r["from"]), str(r["to"]))
 	for p in catalog:
-		if int(p["level"]) > int(current["level"]) and int(p["level"]) <= level() and int(p["seats"]) > int(current["seats"]) and float(p["range"]) >= dist:
+		if int(p["level"]) > int(current["level"]) and int(p["seats"]) > int(current["seats"]) and float(p["range"]) >= dist:
 			result.append(p)
 	return result
 
@@ -315,7 +323,7 @@ func upgrade_plane(route_id: String, model_id: String) -> String:
 	if r.is_empty() or new_plane.is_empty():
 		return "Okänd linje eller flygplansmodell"
 	var current: Dictionary = catalog_by_id.get(str(r["plane"]), {})
-	if int(new_plane["level"]) > level() or int(new_plane["level"]) <= int(current["level"]) or float(new_plane["range"]) < kilometers(str(r["from"]), str(r["to"])):
+	if int(new_plane["level"]) <= int(current["level"]) or float(new_plane["range"]) < kilometers(str(r["from"]), str(r["to"])):
 		return "Modellen är inte tillgänglig"
 	var cost: float = maxf(0.0, rounded(float(new_plane["price"]) - float(current["price"]) * 0.55))
 	if cash < cost:

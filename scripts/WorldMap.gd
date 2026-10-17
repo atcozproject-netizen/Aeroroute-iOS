@@ -14,6 +14,9 @@ const ROUTE_LINE = Color("de986d")
 const ROUTE_GLOW = Color(1.0, 0.83, 0.64, 0.29)
 const OWNED_HALO = Color(0.98, 0.75, 0.52, 0.21)
 const LAND_TEXTURE: Texture2D = preload("res://data/world_land.png")
+const DETAIL_TILE_DEGREES: float = 20.0
+const DETAIL_BEGIN_ZOOM: float = 20.0
+const MAX_ACTIVE_TILES: int = 10
 
 var game
 var camera_lon: float = 13.0
@@ -46,6 +49,9 @@ var land_valid: Array = []
 var map_airports: Array = []
 var visible_pin_codes: Dictionary = {}
 var map_revision: int = 0
+var detail_tile_cache: Dictionary = {}
+var detail_tile_recent: Array[String] = []
+var detailed_tile_draws: int = 0
 
 # The iPhone must not process or label every airport at world scale.
 # A static world-map LOD is computed only once, not on every pan frame.
@@ -58,6 +64,7 @@ const MAX_PAN_STEP_PX: float = 36.0
 
 func configure(source_game) -> void:
 	game = source_game
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	map_airports = game.airports.duplicate()
 	map_airports.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return int(a["rank"]) > int(b["rank"])
@@ -194,6 +201,8 @@ func candidate_airports() -> Array:
 		var code: String = str(airport["icao"])
 		var owned: bool = game.owned.has(code)
 		var focused: bool = code == focused_airport
+		if not owned and not focused and not game.is_featured(code):
+			continue
 		if not owned and not focused and int(airport["rank"]) < minimum_rank:
 			continue
 		var lat: float = float(airport["lat"])
@@ -269,6 +278,8 @@ func _draw() -> void:
 	# self-intersections or antimeridian crossings in the source polygons.
 	# Max three GPU draw calls, rather than hundreds of polygons per frame.
 	draw_land_texture(sc)
+	if zoom >= DETAIL_BEGIN_ZOOM:
+		draw_detail_tiles(sc)
 
 	for r in game.routes:
 		var arc: PackedVector2Array = route_points(str(r["from"]), str(r["to"]))
@@ -337,6 +348,49 @@ func draw_land_texture(sc: float) -> void:
 		var src_w: float = (view_right - view_left) / world_w * tex_size.x
 		draw_texture_rect_region(LAND_TEXTURE, Rect2(view_left, visible_top, view_right-view_left, visible_bottom-visible_top), Rect2(src_x, src_y, src_w, src_h), Color.WHITE, false, true)
 
+
+func tile_resource_path(x: int, y: int) -> String:
+	return "res://data/map_tiles/%02d_%02d.png" % [posmod(x, 18), y]
+
+func cached_detail_tile(x: int, y: int) -> Texture2D:
+	var path: String = tile_resource_path(x, y)
+	if detail_tile_cache.has(path):
+		detail_tile_recent.erase(path)
+		detail_tile_recent.append(path)
+		return detail_tile_cache[path]
+	# Ignore the global cache so tiles that leave view can actually be evicted.
+	var texture: Texture2D = ResourceLoader.load(path, "Texture2D", ResourceLoader.CACHE_MODE_IGNORE) as Texture2D
+	if texture == null:
+		return null
+	detail_tile_cache[path] = texture
+	detail_tile_recent.append(path)
+	while detail_tile_recent.size() > MAX_ACTIVE_TILES:
+		var remove_path: String = detail_tile_recent.pop_front()
+		detail_tile_cache.erase(remove_path)
+	return texture
+
+func draw_detail_tiles(sc: float) -> void:
+	# Natural Earth 10m land rendered to 20-degree tiles at build time.
+	# At max zoom this has approximately one source pixel per screen pixel.
+	var half_lon: float = size.x * 0.5 / maxf(sc, 0.01)
+	var half_lat: float = size.y * 0.5 / maxf(sc * 1.17, 0.01)
+	var left_index: int = floori((camera_lon - half_lon + 180.0) / DETAIL_TILE_DEGREES)
+	var right_index: int = floori((camera_lon + half_lon + 180.0) / DETAIL_TILE_DEGREES)
+	var first_y: int = clampi(floori((90.0 - camera_lat - half_lat) / DETAIL_TILE_DEGREES), 0, 8)
+	var last_y: int = clampi(floori((90.0 - camera_lat + half_lat) / DETAIL_TILE_DEGREES), 0, 8)
+	detailed_tile_draws = 0
+	for y in range(first_y, last_y + 1):
+		var north: float = 90.0 - float(y) * DETAIL_TILE_DEGREES
+		for ix in range(left_index, right_index + 1):
+			# ix may be outside [-180,+180]; keep its world-wrap position.
+			var texture: Texture2D = cached_detail_tile(ix, y)
+			if texture == null:
+				continue
+			var lon_left: float = -180.0 + float(ix) * DETAIL_TILE_DEGREES
+			var pos: Vector2 = world_project_raw(lon_left, north)
+			var draw_size: Vector2 = Vector2(DETAIL_TILE_DEGREES * sc, DETAIL_TILE_DEGREES * sc * 1.17)
+			draw_texture_rect(texture, Rect2(pos, draw_size), false, Color.WHITE)
+			detailed_tile_draws += 1
 
 func route_points(a_code: String, b_code: String) -> PackedVector2Array:
 	var a: Dictionary = game.airport(a_code)

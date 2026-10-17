@@ -6,7 +6,6 @@ const MapScript = preload("res://scripts/WorldMap.gd")
 const FlightScript = preload("res://scripts/FlightLayer.gd")
 const FirScript = preload("res://scripts/FirLayer.gd")
 const ProfitScript = preload("res://scripts/ProfitEffects.gd")
-const CelebrationScript = preload("res://scripts/LevelCelebration.gd")
 const PAPER = Color("fffdf5")
 const INK = Color("254853")
 const MUTED = Color("7f9a9d")
@@ -55,10 +54,6 @@ var flight_eta: Label
 var search_line: LineEdit
 var search_results: VBoxContainer
 var zoom_buttons: VBoxContainer
-var level_effects: Control
-var goal_caption: Label
-var goal_bar: ProgressBar
-var previous_level: int = 1
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -71,7 +66,6 @@ func _ready() -> void:
 		show_tab("map")
 	else:
 		show_start()
-	previous_level = game.level()
 	refresh_hud()
 
 func add_styled_panel(color: Color, radius: int = 20) -> PanelContainer:
@@ -202,11 +196,6 @@ func create_scene() -> void:
 	profit_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(profit_layer)
 	profit_layer.setup(game, world_map)
-	level_effects = CelebrationScript.new()
-	level_effects.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	level_effects.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(level_effects)
-
 	# Opaque, non-interactive header gives the brand and counters proper readability.
 	var header: ColorRect = ColorRect.new()
 	header.color = Color("e2efe9")
@@ -337,26 +326,9 @@ func create_scene() -> void:
 	var time_info: VBoxContainer = stack(3)
 	time_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	time_row.add_child(time_info)
-	goal_caption = label("NIVÅ 1  ·  MÅL 160 PAX", 10, MUTED, true)
-	time_info.add_child(goal_caption)
+	time_info.add_child(label("SPELTID", 10, MUTED))
 	clock_label = label("DAG 01", 17, INK, true)
 	time_info.add_child(clock_label)
-	goal_bar = ProgressBar.new()
-	goal_bar.custom_minimum_size = Vector2(120.0, 5.0)
-	goal_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	goal_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	goal_bar.show_percentage = false
-	goal_bar.min_value = 0.0
-	goal_bar.max_value = 160.0
-	var goal_background: StyleBoxFlat = StyleBoxFlat.new()
-	goal_background.bg_color = Color("d7e5dd")
-	goal_background.set_corner_radius_all(3)
-	goal_bar.add_theme_stylebox_override("background", goal_background)
-	var goal_fill: StyleBoxFlat = StyleBoxFlat.new()
-	goal_fill.bg_color = Color("e2a36f")
-	goal_fill.set_corner_radius_all(3)
-	goal_bar.add_theme_stylebox_override("fill", goal_fill)
-	time_info.add_child(goal_bar)
 	play_button = button("PAUS", false)
 	play_button.custom_minimum_size.x = 78
 	time_row.add_child(play_button)
@@ -714,6 +686,8 @@ func _search_updated(query: String) -> void:
 	clear_children(search_results)
 	var matches: Array = []
 	for a in game.airports:
+		if not game.is_featured(str(a["icao"])):
+			continue
 		var field: String = "%s %s %s %s" % [a["icao"], a["iata"], a["name"], a["country"]]
 		if query.strip_edges() == "" or field.to_lower().contains(query.to_lower()):
 			matches.append(a)
@@ -792,7 +766,7 @@ func build_tab() -> void:
 			map_btn.pressed.connect(func() -> void: show_tab("map"))
 		"fleet":
 			content_body.add_child(label("FLYGPLANSFLOTTAN", 24, INK, true))
-			content_body.add_child(label("NIVÅ %d / 8  ·  %d plan" % [game.level(), game.routes.size()], 13, MUTED))
+			content_body.add_child(label("%d aktiva flygplan  ·  Fritt modellval efter räckvidd och ekonomi" % game.routes.size(), 13, MUTED))
 			for r in game.routes:
 				var plane: Dictionary = game.catalog_by_id.get(str(r["plane"]), {})
 				var b: Button = button("%s  ·  %s - %s" % [plane.get("name", ""), r["from"], r["to"]], false)
@@ -800,11 +774,9 @@ func build_tab() -> void:
 				var id: String = str(r["id"])
 				b.pressed.connect(func() -> void: show_route(id))
 			content_body.add_child(line_break())
-			content_body.add_child(label("FLYGPLANSNIVÅER", 12, MUTED, true))
+			content_body.add_child(label("TILLGÄNGLIGA FLYGPLAN", 12, MUTED, true))
 			for p in game.catalog:
-				content_body.add_child(label("%s  %s  ·  %d platser" % ["KLAR" if int(p["level"]) <= game.level() else "LÅST", p["name"], int(p["seats"])], 13, INK if int(p["level"]) <= game.level() else MUTED))
-			if game.next_level_requirement() > 0:
-				content_body.add_child(label("Nästa nivå vid %d transporterade passagerare." % game.next_level_requirement(), 12, MUTED))
+				content_body.add_child(label("%s  ·  %d platser  ·  %d km" % [p["name"], int(p["seats"]), roundi(float(p["range"]))], 13, INK))
 		"company":
 			content_body.add_child(label("DITT FLYGBOLAG", 24, INK, true))
 			content_body.add_child(label(game.company_name, 19, INK, true))
@@ -875,17 +847,6 @@ func refresh_hud() -> void:
 	hud_routes.text = str(game.routes.size())
 	hud_passengers.text = str(game.total_passengers)
 	clock_label.text = "DAG %02d" % game.day
-	if goal_bar != null and goal_caption != null:
-		var target: int = game.next_level_requirement()
-		var rank: int = game.level()
-		var base: int = 0 if rank <= 1 else int(game.LEVEL_REQUIREMENTS[rank - 1])
-		if target < 0:
-			goal_caption.text = "NIVÅ 8 · MAXNIVÅ"
-			goal_bar.value = goal_bar.max_value
-		else:
-			goal_caption.text = "NIVÅ %d  ·  %d/%d PAX" % [rank, game.total_passengers, target]
-			goal_bar.max_value = maxf(1.0, float(target - base))
-			goal_bar.value = clampf(float(game.total_passengers - base), 0.0, goal_bar.max_value)
 	play_button.text = "SPELA" if game.paused else "PAUS"
 	if current_sheet == "route" and flight_eta != null:
 		var r: Dictionary = game.get_route(current_route)
@@ -894,11 +855,6 @@ func refresh_hud() -> void:
 
 func _on_game_changed() -> void:
 	refresh_hud()
-	if game.initialized and game.level() > previous_level:
-		previous_level = game.level()
-		level_effects.celebrate(previous_level)
-	elif game.level() < previous_level:
-		previous_level = game.level()
 	world_map.queue_redraw()
 
 func _on_landed(route_id: String, count: int, net: float) -> void:
@@ -1004,6 +960,8 @@ func _update_start_choices(search_text: String) -> void:
 				options.append(game.airport(code))
 	else:
 		for a in game.airports:
+			if not game.is_featured(str(a["icao"])):
+				continue
 			if (str(a["icao"]) + " " + str(a["iata"]) + " " + str(a["name"])).to_lower().contains(q):
 				options.append(a)
 	options.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["rank"]) > int(b["rank"]))
