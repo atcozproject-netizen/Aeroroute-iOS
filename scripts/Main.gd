@@ -505,7 +505,9 @@ func update_map_status() -> void:
 		map_status.text = "FIR • DISKRETA GRÄNSER"
 	else:
 		map_status.text = "KARTA • FLYTTA MED FINGRET"
-	map_status.visible = active_tab == "map" and game.initialized
+	# The top HUD communicates FIR state through its button; the map status
+	# is reserved for purposeful route building, never persistent cartographic text.
+	map_status.visible = active_tab == "map" and game.initialized and route_mode
 
 func _airport_tapped(code: String) -> void:
 	if not game.initialized:
@@ -524,6 +526,8 @@ func _airport_tapped(code: String) -> void:
 		update_map_status()
 		world_map.queue_redraw()
 	else:
+		world_map.focused_airport = code
+		world_map.queue_redraw()
 		show_airport(code)
 
 func _draft_route(from: String, to: String) -> void:

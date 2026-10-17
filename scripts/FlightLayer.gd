@@ -4,6 +4,7 @@ extends Control
 var game
 var map_view
 var accumulator: float = 0.0
+var ambient_time: float = 0.0
 
 func setup(model, world_map) -> void:
 	game = model
@@ -14,6 +15,7 @@ func _process(delta: float) -> void:
 	if game == null or not visible or game.routes.is_empty():
 		return
 	accumulator += delta
+	ambient_time += delta
 	if accumulator >= 0.042:
 		accumulator = 0.0
 		queue_redraw()
@@ -21,6 +23,21 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	if game == null or map_view == null:
 		return
+	# Active hubs breathe gently while planes fly. This is decorative only
+	# and does not create input targets or additional route labels.
+	var active_codes: Dictionary = {}
+	for r in game.routes:
+		active_codes[str(r["from"])] = true
+		active_codes[str(r["to"])] = true
+	var pulse: float = 0.5 + 0.5 * sin(ambient_time * 2.25)
+	for code in active_codes:
+		var airport: Dictionary = game.airport(str(code))
+		if airport.is_empty():
+			continue
+		var hub_pos: Vector2 = map_view.project(float(airport["lon"]), float(airport["lat"]))
+		if hub_pos.x < 10.0 or hub_pos.x > size.x - 10.0 or hub_pos.y < 177.0 or hub_pos.y > size.y - 170.0:
+			continue
+		draw_arc(hub_pos, 8.0 + 3.0 * pulse, 0.0, TAU, 24, Color(0.98, 0.75, 0.48, 0.12 + 0.16 * pulse), 1.4, true)
 	for route in game.routes:
 		var arc: PackedVector2Array = map_view.route_points(str(route["from"]), str(route["to"]))
 		if arc.size() < 2:
