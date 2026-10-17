@@ -44,6 +44,8 @@ var start_overlay: ColorRect
 var start_search: LineEdit
 var start_choices: VBoxContainer
 var start_choice_code: String = "ESSA"
+var start_selection_label: Label
+var start_begin_button: Button
 var route_origin: String = ""
 var active_tab: String = "map"
 var current_sheet: String = ""
@@ -175,7 +177,7 @@ func create_scene() -> void:
 	world_map.configure(game)
 	world_map.airport_tapped.connect(_airport_tapped)
 	world_map.route_tapped.connect(_route_tapped)
-	world_map.route_drafted.connect(_draft_route)
+	world_map.route_drafted.connect(_quick_create_route)
 	fir_layer = FirScript.new()
 	fir_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	fir_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -319,7 +321,7 @@ func create_scene() -> void:
 		fir_button.text = "AV" if fir_mode == 0 else ("FIR" if fir_mode == 1 else "FIR+")
 		update_map_status()
 	)
-	route_mode_button = button("+ NY LINJE", true)
+	route_mode_button = button("DRA NY LINJE", true)
 	route_mode_button.toggle_mode = true
 	route_mode_button.anchor_top = 1.0
 	route_mode_button.anchor_bottom = 1.0
@@ -348,7 +350,7 @@ func create_scene() -> void:
 		follow_button.text = "✕ SLUTA FÖLJA" if active else "✈ FÖLJ FLYG"
 	)
 	route_mode_button.toggled.connect(func(active: bool) -> void:
-		route_mode_button.text = "✓ VÄLJ 2 PLATSER" if active else "+ NY LINJE"
+		route_mode_button.text = "✓ VÄLJ 2 PLATSER" if active else "DRA NY LINJE"
 		route_mode = active
 		world_map.route_draw_enabled = active
 		route_origin = ""
@@ -562,12 +564,30 @@ func _route_tapped(route_id: String) -> void:
 		return
 	show_plane_picker(route_id)
 
+func _quick_create_route(from: String, to: String) -> void:
+	# Fly Corp-like: draw between two airports and the route opens immediately
+	# with an automatically selected suitable plane. No menu selection required.
+	if not game.initialized:
+		return
+	if from == to:
+		return
+	var id: String = game.route_key(from, to)
+	if not game.get_route(id).is_empty():
+		show_plane_picker(id)
+		return
+	var error: String = game.create_route(from, to)
+	if error != "":
+		toast(error)
+		return
+	world_map.animate_new_route(id)
+	toast("Ny linje: %s ↔ %s" % [from, to])
+
 func _draft_route(from: String, to: String) -> void:
 	world_map.route_draw_enabled = false
 	route_mode = false
 	if route_mode_button != null:
 		route_mode_button.set_pressed_no_signal(false)
-		route_mode_button.text = "+ NY LINJE"
+		route_mode_button.text = "DRA NY LINJE"
 	route_origin = ""
 	world_map.route_origin = ""
 	world_map.queue_redraw()
@@ -625,22 +645,8 @@ func show_airport(code: String) -> void:
 			route_button.pressed.connect(func() -> void: show_plane_picker(id))
 	else:
 		sheet_body.add_child(label("Inga anslutna linjer ännu.", 13, MUTED))
-	sheet_body.add_child(line_break())
-	var new_line: Button = button("+ NY LINJE FRÅN " + code, false)
-	sheet_body.add_child(new_line)
-	new_line.pressed.connect(func() -> void:
-		close_sheet()
-		route_origin = code
-		world_map.route_origin = code
-		route_mode = true
-		world_map.route_draw_enabled = true
-		if route_mode_button != null:
-			route_mode_button.set_pressed_no_signal(true)
-			route_mode_button.text = "✓ VÄLJ 2 PLATSER"
-		world_map.queue_redraw()
-		update_map_status()
-		toast("Välj destinationsflygplats")
-	)
+	if connected.is_empty():
+		sheet_body.add_child(label("Håll på flygplatsen och dra till nästa flygplats på kartan.", 12, MUTED))
 
 func show_plane_picker(route_id: String) -> void:
 	var route: Dictionary = game.get_route(route_id)
@@ -832,7 +838,7 @@ func show_tab(tab: String) -> void:
 		world_map.route_origin = ""
 		if route_mode_button != null:
 			route_mode_button.set_pressed_no_signal(false)
-			route_mode_button.text = "+ NY LINJE"
+			route_mode_button.text = "DRA NY LINJE"
 	update_map_status()
 	for key in tab_buttons:
 		var nav_button: Button = tab_buttons[key]
@@ -1051,49 +1057,55 @@ func toast(message: String) -> void:
 	toast_tween.tween_callback(func() -> void: active_toast.visible = false)
 
 func show_start() -> void:
+	# Entirely fixed-height startup controls. The former nested scroll list
+	# could lose labels or swallow touch while scrolling in iPhone Safari.
 	start_overlay = ColorRect.new()
-	start_overlay.color = Color("d1e8e4")
+	start_overlay.color = Color("153e4b")
 	start_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	start_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(start_overlay)
-	var center := CenterContainer.new()
+	var center: CenterContainer = CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	start_overlay.add_child(center)
-	var welcome: PanelContainer = add_styled_panel(Color("fffdf6"), 28)
-	welcome.custom_minimum_size = Vector2(340, 480)
+	var welcome: PanelContainer = add_styled_panel(Color("fffaf0"), 23)
+	welcome.custom_minimum_size = Vector2(minf(maxf(size.x - 26.0, 282.0), 376.0), 0.0)
 	center.add_child(welcome)
-	var container: VBoxContainer = stack(12)
-	welcome.add_child(container)
-	container.add_child(label("A E R O R O U T E", 20, DARK, true))
-	container.add_child(label("Ditt flygbolag. Din värld.", 22, INK, true))
-	container.add_child(label("Bygg ett globalt flygnät, en linje i taget. Börja utan flygplan och rutter.", 13, MUTED))
-	container.add_child(line_break())
-	container.add_child(label("VÄLJ HUVUDFLYGPLATS", 11, MUTED, true))
+	var box: VBoxContainer = stack(10)
+	welcome.add_child(box)
+	var wordmark: Label = label("A E R O R O U T E", 20, DARK, true)
+	box.add_child(wordmark)
+	box.add_child(label("Bygg ditt flygbolag", 20, INK, true))
+	box.add_child(label("Välj en startflygplats. Sedan kan du dra linjer direkt mellan flygplatser på kartan.", 13, MUTED))
+	box.add_child(line_break())
+	box.add_child(label("HUVUDFLYGPLATS", 11, MUTED, true))
 	start_search = LineEdit.new()
-	start_search.placeholder_text = "Sök stad eller ICAO-kod"
-	start_search.custom_minimum_size.y = 45
-	container.add_child(start_search)
-	var airport_scroll := ScrollContainer.new()
-	airport_scroll.custom_minimum_size.y = 170
-	airport_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	container.add_child(airport_scroll)
-	start_choices = stack(4)
-	start_choices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	airport_scroll.add_child(start_choices)
+	start_search.placeholder_text = "Sök ICAO, IATA eller stad"
+	start_search.custom_minimum_size.y = 48.0
+	start_search.clear_button_enabled = true
+	box.add_child(start_search)
+	start_choices = stack(5)
+	box.add_child(start_choices)
+	start_selection_label = label("", 13, Color("2b705e"), true)
+	start_selection_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	start_selection_label.clip_text = true
+	box.add_child(start_selection_label)
 	start_search.text_changed.connect(_update_start_choices)
 	_update_start_choices("")
-	var begin_btn: Button = button("STARTA NYTT FLYGBOLAG")
-	container.add_child(begin_btn)
-	begin_btn.pressed.connect(func() -> void:
+	start_begin_button = button("STARTA FLYGBOLAG  →")
+	start_begin_button.custom_minimum_size.y = 53.0
+	box.add_child(start_begin_button)
+	start_begin_button.pressed.connect(func() -> void:
 		if not game.can_start_at(start_choice_code):
-			toast("Välj en flygplats med en möjlig startlinje inom 1100 km")
+			start_selection_label.text = "Välj en giltig startflygplats"
 			return
+		start_search.release_focus()
 		game.begin(start_choice_code)
 		update_map_status()
 		start_overlay.queue_free()
 		start_overlay = null
 		world_map.center_on(game.home)
 		show_tab("map")
+		toast("Håll på en flygplats och dra till nästa för en linje")
 	)
 
 func _update_start_choices(search_text: String) -> void:
@@ -1101,26 +1113,70 @@ func _update_start_choices(search_text: String) -> void:
 	var options: Array = []
 	var q: String = search_text.to_lower().strip_edges()
 	if q.is_empty():
-		for code in ["ESSA", "EGLL", "KJFK", "EKCH", "OMDB", "WSSS"]:
-			if game.airports_by_code.has(code):
+		for code in ["ESSA", "EGLL", "WSSS", "OMDB"]:
+			if game.airports_by_code.has(code) and game.can_start_at(code):
 				options.append(game.airport(code))
 	else:
-		for a in game.airports:
-			if not game.is_featured(str(a["icao"])):
+		for airport in game.airports:
+			var code: String = str(airport["icao"])
+			if not game.is_featured(code):
 				continue
-			if (str(a["icao"]) + " " + str(a["iata"]) + " " + str(a["name"])).to_lower().contains(q):
-				options.append(a)
-	options.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["rank"]) > int(b["rank"]))
-	for i in range(mini(8, options.size())):
-		var a: Dictionary = options[i]
-		var code: String = str(a["icao"])
-		var b: Button = button("%s · %s" % [code, a["name"]], false)
-		start_choices.add_child(b)
-		b.pressed.connect(func() -> void:
+			var searchable: String = "%s %s %s %s" % [code, airport["iata"], airport["name"], airport["country"]]
+			if searchable.to_lower().contains(q) and game.can_start_at(code):
+				options.append(airport)
+		options.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			var prefix_a: bool = str(a["icao"]).to_lower().begins_with(q) or str(a["iata"]).to_lower().begins_with(q)
+			var prefix_b: bool = str(b["icao"]).to_lower().begins_with(q) or str(b["iata"]).to_lower().begins_with(q)
+			if prefix_a != prefix_b:
+				return prefix_a
+			return int(a["rank"]) > int(b["rank"])
+		)
+	for i in range(mini(4, options.size())):
+		var airport: Dictionary = options[i]
+		var code: String = str(airport["icao"])
+		var fullname: String = str(airport["name"])
+		var choice: Button = button("", false)
+		choice.toggle_mode = true
+		choice.custom_minimum_size.y = 47.0
+		choice.add_theme_font_size_override("font_size", 12)
+		start_choices.add_child(choice)
+		choice.set_meta("airport_code", code)
+		choice.pressed.connect(func() -> void:
 			start_choice_code = code
 			start_search.release_focus()
-			toast("Startflygplats: " + code)
+			_update_start_selected_visual()
 		)
+	_update_start_selected_visual()
+
+func _update_start_selected_visual() -> void:
+	if start_selection_label == null:
+		return
+	for node in start_choices.get_children():
+		if not (node is Button):
+			continue
+		var airport_button: Button = node as Button
+		var code: String = str(airport_button.get_meta("airport_code", ""))
+		var airport: Dictionary = game.airport(code)
+		var name_short: String = str(airport.get("name", code))
+		if name_short.length() > 29:
+			name_short = name_short.substr(0, 28).strip_edges() + "…"
+		var selected: bool = code == start_choice_code
+		airport_button.text = ("✓  " if selected else "     ") + code + " · " + name_short
+		airport_button.set_pressed_no_signal(selected)
+		airport_button.add_theme_color_override("font_color", Color("fffdf6") if selected else DARK)
+		var background: StyleBoxFlat = StyleBoxFlat.new()
+		background.bg_color = Color("397569") if selected else Color("e5efea")
+		background.set_corner_radius_all(10)
+		background.content_margin_left = 11
+		background.content_margin_right = 11
+		airport_button.add_theme_stylebox_override("normal", background)
+		airport_button.add_theme_stylebox_override("pressed", background)
+		airport_button.add_theme_stylebox_override("hover", background)
+	var selected_airport: Dictionary = game.airport(start_choice_code)
+	if selected_airport.is_empty():
+		start_selection_label.text = "Välj en flygplats"
+	else:
+		start_selection_label.text = "VALD: %s · %s" % [start_choice_code, str(selected_airport["name"])]
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and game != null:

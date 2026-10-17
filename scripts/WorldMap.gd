@@ -38,7 +38,7 @@ var drag_threshold: float = 11.0
 var route_draw_enabled: bool = false
 var gesture_kind: String = "idle"
 var hold_elapsed: float = 0.0
-const HOLD_TO_ROUTE_SECONDS: float = 0.42
+const HOLD_TO_ROUTE_SECONDS: float = 0.26
 
 var temporary_line_end: Vector2 = Vector2.ZERO
 var pointers: Dictionary = {}
@@ -533,7 +533,7 @@ func handle_press(pos: Vector2) -> void:
 	pointer_down = true
 	pointer_start = pos
 	pointer_last = pos
-	pointer_from = nearest_airport(pos, 30.0)
+	pointer_from = nearest_airport(pos, 19.0)
 	pointer_moved = false
 	temporary_line_end = pos
 	hold_elapsed = 0.0
@@ -552,6 +552,8 @@ func handle_motion(pos: Vector2) -> void:
 	if gesture_kind == "pan":
 		pan(pos - pointer_last)
 	elif gesture_kind == "route":
+		if pointer_start.distance_to(pos) > 6.0:
+			pointer_moved = true
 		temporary_line_end = pos
 		queue_redraw()
 	pointer_last = pos
@@ -567,7 +569,7 @@ func handle_release(pos: Vector2) -> void:
 	gesture_kind = "idle"
 	hold_elapsed = 0.0
 	if was_route:
-		var target: String = nearest_airport(pos, 33.0)
+		var target: String = nearest_airport(pos, 30.0)
 		if target != "" and origin_code != "" and target != origin_code:
 			route_drafted.emit(origin_code, target)
 	elif was_tap:
