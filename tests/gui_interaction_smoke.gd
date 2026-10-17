@@ -113,5 +113,52 @@ func _run() -> void:
 	if view.current_sheet != "planner" or view.route_mode or view.route_origin != "":
 		_fail("Two airport selections did not open route planner and clear gesture mode")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: interface, actual profit, FIR boundaries, two-airport route planner")
+	# Finger-drag regression: use the same InputEventScreenTouch / InputEventScreenDrag
+	# events the iPhone sends to Godot, between actual visible airport markers.
+	view.show_tab("map")
+	view.world_map.center_on("OMDB")
+	await process_frame
+	var targets: Array = []
+	for airport_item in view.world_map.candidate_airports():
+		var point: Vector2 = airport_item["position"]
+		if view.map_can_interact(point):
+			targets.append(airport_item)
+	var source_airport: Dictionary = {}
+	var destination_airport: Dictionary = {}
+	for a in targets:
+		for b in targets:
+			if a["code"] != b["code"] and a["position"].distance_to(b["position"]) >= 65.0:
+				source_airport = a
+				destination_airport = b
+				break
+		if not source_airport.is_empty():
+			break
+	if source_airport.is_empty():
+		_fail("Could not find two separated, tappable airports for touch drag")
+		return
+	var from_pos: Vector2 = source_airport["position"]
+	var to_pos: Vector2 = destination_airport["position"]
+	var down: InputEventScreenTouch = InputEventScreenTouch.new()
+	down.index = 0
+	down.pressed = true
+	down.position = from_pos
+	root.push_input(down, true)
+	var move_event: InputEventScreenDrag = InputEventScreenDrag.new()
+	move_event.index = 0
+	move_event.position = to_pos
+	move_event.relative = to_pos - from_pos
+	root.push_input(move_event, true)
+	var up: InputEventScreenTouch = InputEventScreenTouch.new()
+	up.index = 0
+	up.pressed = false
+	up.position = to_pos
+	root.push_input(up, true)
+	await process_frame
+	if view.current_sheet != "planner":
+		_fail("Dragging between two actual airports did not open route planner")
+		return
+	if view.world_map.gesture_captured or not view.world_map.pointers.is_empty():
+		_fail("A completed drag left the iPhone gesture captured")
+		return
+	print("AEROROUTE GUI SMOKE PASSED: FIR, two-tap planning, native touch drag and clean release")
 	quit(0)
