@@ -47,6 +47,8 @@ var sheet: PanelContainer
 var sheet_scroll: ScrollContainer
 var sheet_body: VBoxContainer
 var start_overlay: ColorRect
+var start_welcome: PanelContainer
+var start_layout: GridContainer
 var start_search: LineEdit
 var start_choices: VBoxContainer
 var start_choice_code: String = "ESSA"
@@ -620,6 +622,9 @@ func _layout_for_size(view_size: Vector2) -> void:
 			sheet.offset_right = 0.0
 			sheet.offset_top = -minf(555.0, view_size.y * 0.73)
 			sheet.offset_bottom = -62.0
+	if start_layout != null and is_instance_valid(start_layout) and start_welcome != null and is_instance_valid(start_welcome):
+		start_layout.columns = 2 if landscape else 1
+		start_welcome.custom_minimum_size.x = minf(view_size.x - 32.0, 740.0) if landscape else minf(maxf(view_size.x - 26.0, 282.0), 376.0)
 	if content_view != null:
 		if landscape:
 			content_view.anchor_left = 1.0
@@ -1251,33 +1256,45 @@ func show_start() -> void:
 	var center: CenterContainer = CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	start_overlay.add_child(center)
-	var welcome: PanelContainer = add_styled_panel(Color("fffaf0"), 23)
-	welcome.custom_minimum_size = Vector2(minf(maxf(size.x - 26.0, 282.0), 376.0), 0.0)
-	center.add_child(welcome)
-	var box: VBoxContainer = stack(10)
-	welcome.add_child(box)
+	start_welcome = add_styled_panel(Color("fffaf0"), 23)
+	start_welcome.custom_minimum_size = Vector2(minf(maxf(size.x - 26.0, 282.0), 376.0), 0.0)
+	center.add_child(start_welcome)
+	start_layout = GridContainer.new()
+	start_layout.columns = 1
+	start_layout.add_theme_constant_override("h_separation", 19)
+	start_layout.add_theme_constant_override("v_separation", 8)
+	start_welcome.add_child(start_layout)
+	var introduction: VBoxContainer = stack(9)
+	introduction.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	introduction.custom_minimum_size.x = 0.0
+	start_layout.add_child(introduction)
 	var wordmark: Label = label("A E R O R O U T E", 20, DARK, true)
-	box.add_child(wordmark)
-	box.add_child(label("Bygg ditt flygbolag", 20, INK, true))
-	box.add_child(label("Välj en startflygplats. Sedan kan du dra linjer direkt mellan flygplatser på kartan.", 13, MUTED))
-	box.add_child(line_break())
-	box.add_child(label("HUVUDFLYGPLATS", 11, MUTED, true))
+	introduction.add_child(wordmark)
+	introduction.add_child(label("Bygg ditt flygbolag", 20, INK, true))
+	introduction.add_child(label("Välj en startflygplats. Dra sedan linjer direkt mellan flygplatser på kartan.", 13, MUTED))
+	introduction.add_child(line_break())
+	introduction.add_child(label("HUVUDFLYGPLATS", 11, MUTED, true))
 	start_search = LineEdit.new()
 	start_search.placeholder_text = "Sök ICAO, IATA eller stad"
 	start_search.custom_minimum_size.y = 48.0
 	start_search.clear_button_enabled = true
-	box.add_child(start_search)
+	introduction.add_child(start_search)
+	var choices_column: VBoxContainer = stack(8)
+	choices_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	choices_column.custom_minimum_size.x = 0.0
+	start_layout.add_child(choices_column)
 	start_choices = stack(5)
-	box.add_child(start_choices)
+	choices_column.add_child(start_choices)
 	start_selection_label = label("", 13, Color("2b705e"), true)
 	start_selection_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	start_selection_label.clip_text = true
-	box.add_child(start_selection_label)
+	choices_column.add_child(start_selection_label)
 	start_search.text_changed.connect(_update_start_choices)
 	_update_start_choices("")
 	start_begin_button = button("STARTA FLYGBOLAG  →")
 	start_begin_button.custom_minimum_size.y = 53.0
-	box.add_child(start_begin_button)
+	choices_column.add_child(start_begin_button)
+	_refresh_layout()
 	start_begin_button.pressed.connect(func() -> void:
 		if not game.can_start_at(start_choice_code):
 			start_selection_label.text = "Välj en giltig startflygplats"
