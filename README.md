@@ -6,14 +6,14 @@ A 2D, map-first airline management game. The **actual game runs in Godot 4.5.1**
 
 ## Gameplay
 
-- Start a new airline from a commercial airport, search real ICAO/IATA airports, and explore a styled world map.
-- Draw new flight routes by touching airports. Opening costs break down aircraft purchase, route setup, and first-time airport access.
-- Watch aircraft move between cities, follow active flights, view live profits and adjust game speed.
+- Start with a **country selector**, then choose **any airport in that country** as the home HUB, including smaller regional airports included in the data.
+- Browsing the world is always swipe-to-pan and pinch-to-zoom. Creating a route requires consciously pressing **NY LINJE**, tapping the two airports and confirming its price. Long-pressing cannot create routes.
+- Watch larger aircraft silhouettes move between airports. Flight following is available from route details, and optional simulation speed and pause are under company settings, not floating over the map.
 - Manage terminals, choose aircraft by range, and monitor network profitability and passenger demand.
 - Adjust route fares: **revenue, operating costs, passenger load and forecast net profit refresh immediately**.
 - Use the optional market-based suggested ticket price. It is a forecast, not guaranteed profit.
 - The aircraft selection screen compares forecast net per flight and passenger load across available models.
-- Optional FIR boundaries; touch-safe layouts for portrait and true landscape on iPhone.
+- FIR overlays and secondary map tools are hidden by default for a calm, unobstructed iPhone world map; layouts support portrait and landscape.
 - Browser-local autosave, no mandatory levels and no visible day counter.
 
 ## Build and quality checks
