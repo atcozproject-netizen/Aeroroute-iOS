@@ -482,13 +482,13 @@ func create_scene() -> void:
 	quote_card.anchor_right = 0.5
 	quote_card.anchor_top = 1.0
 	quote_card.anchor_bottom = 1.0
-	quote_card.offset_left = -150.0
-	quote_card.offset_right = 150.0
-	quote_card.offset_top = -267.0
-	quote_card.offset_bottom = -211.0
+	quote_card.offset_left = -169.0
+	quote_card.offset_right = 169.0
+	quote_card.offset_top = -314.0
+	quote_card.offset_bottom = -216.0
 	quote_card.visible = false
 	add_child(quote_card)
-	quote_label = label("", 12, Color("fff6e6"), true)
+	quote_label = label("", 11, Color("fff6e6"), true)
 	quote_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	quote_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	quote_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -529,13 +529,18 @@ func _update_route_quote(quote: Dictionary) -> void:
 	var style: StyleBoxFlat = quote_card.get_theme_stylebox("panel") as StyleBoxFlat
 	style.bg_color = Color("1b6559") if is_ok else Color("713f49") if destination != "" else Color("204959")
 	if destination == "":
-		quote_label.text = "DRA TILL EN FLYGPLATS\nPriset visas innan du släpper"
+		quote_label.text = "DRA TILL EN FLYGPLATS\nPriset visas när fingret når markören"
 	elif price < 0.0:
 		quote_label.text = "%s → %s · EJ MÖJLIG\n%s" % [quote["from"], destination, reason]
-	elif is_ok:
-		quote_label.text = "%s → %s · %s\n✓ DU HAR RÅD · SALDO %s" % [quote["from"], destination, game.money(price), game.money(game.cash)]
 	else:
-		quote_label.text = "%s → %s · %s\n%s · SALDO %s" % [quote["from"], destination, game.money(price), reason, game.money(game.cash)]
+		var amount_aircraft: float = float(quote.get("aircraft", 0.0))
+		var amount_airport: float = float(quote.get("airport_fee", 0.0))
+		var amount_route: float = float(quote.get("route_fee", 0.0))
+		var detail: String = "Plan %s + flygplats %s + linje %s" % [game.money(amount_aircraft), game.money(amount_airport), game.money(amount_route)]
+		if is_ok:
+			quote_label.text = "%s → %s    TOTALT %s\n%s\n✓ KVAR EFTER KÖP: %s" % [quote["from"], destination, game.money(price), detail, game.money(float(quote["remaining"]))]
+		else:
+			quote_label.text = "%s → %s    TOTALT %s\n%s\n%s" % [quote["from"], destination, game.money(price), detail, reason]
 
 func _refresh_layout() -> void:
 	_layout_for_size(size)
@@ -549,7 +554,7 @@ func _layout_for_size(view_size: Vector2) -> void:
 	cockpit_background.anchor_right = 0.0 if landscape else 1.0
 	cockpit_background.offset_left = 8.0
 	cockpit_background.offset_right = cockpit_width - 8.0 if landscape else -8.0
-	cockpit_background.offset_bottom = 118.0
+	cockpit_background.offset_bottom = 108.0 if landscape else 118.0
 	cockpit_top.anchor_right = 0.0 if landscape else 1.0
 	cockpit_top.offset_left = 19.0
 	cockpit_top.offset_right = cockpit_width - 19.0 if landscape else -19.0
@@ -580,25 +585,32 @@ func _layout_for_size(view_size: Vector2) -> void:
 		clock_dock.offset_right = -11.0
 		clock_dock.offset_top = -125.0
 		clock_dock.offset_bottom = -65.0
-	route_mode_button.offset_top = -128.0 if landscape else -196.0
+	var game_action_width: float = minf(130.0, maxf(95.0, view_size.x * 0.15))
+	route_mode_button.offset_left = 13.0
+	route_mode_button.offset_right = 13.0 + game_action_width
+	route_mode_button.offset_top = -126.0 if landscape else -196.0
 	route_mode_button.offset_bottom = -76.0 if landscape else -147.0
+	follow_button.offset_left = 24.0 + game_action_width
+	follow_button.offset_right = 24.0 + game_action_width * 2.0
 	follow_button.offset_top = route_mode_button.offset_top
 	follow_button.offset_bottom = route_mode_button.offset_bottom
 	if quote_card != null:
 		quote_card.anchor_top = 0.0 if landscape else 1.0
 		quote_card.anchor_bottom = 0.0 if landscape else 1.0
-		quote_card.offset_top = 126.0 if landscape else -260.0
-		quote_card.offset_bottom = 185.0 if landscape else -204.0
+		quote_card.offset_top = 115.0 if landscape else -314.0
+		quote_card.offset_bottom = 213.0 if landscape else -216.0
+		quote_card.offset_left = -182.0 if landscape else -169.0
+		quote_card.offset_right = 182.0 if landscape else 169.0
 	if sheet != null:
 		if landscape:
 			sheet.anchor_left = 1.0
 			sheet.anchor_right = 1.0
 			sheet.anchor_top = 0.0
 			sheet.anchor_bottom = 1.0
-			sheet.offset_left = -minf(466.0, view_size.x * 0.57)
+			sheet.offset_left = -minf(422.0, view_size.x * 0.49)
 			sheet.offset_right = -10.0
 			sheet.offset_top = 80.0
-			sheet.offset_bottom = -64.0
+			sheet.offset_bottom = -8.0
 		else:
 			sheet.anchor_left = 0.0
 			sheet.anchor_right = 1.0
@@ -614,7 +626,7 @@ func _layout_for_size(view_size: Vector2) -> void:
 			content_view.anchor_right = 1.0
 			content_view.anchor_top = 0.0
 			content_view.anchor_bottom = 1.0
-			content_view.offset_left = -minf(view_size.x * 0.45, 474.0)
+			content_view.offset_left = -minf(view_size.x * 0.42, 432.0)
 			content_view.offset_right = -9.0
 			content_view.offset_top = 84.0
 			content_view.offset_bottom = -9.0
