@@ -1356,8 +1356,9 @@ func toast(message: String) -> void:
 	toast_tween.tween_callback(func() -> void: active_toast.visible = false)
 
 func show_start() -> void:
-	# Entirely fixed-height startup controls. The former nested scroll list
-	# could lose labels or swallow touch while scrolling in iPhone Safari.
+	# Two-step onboarding: select the country first, then ANY airport there.
+	start_country = ""
+	start_choice_code = ""
 	start_overlay = ColorRect.new()
 	start_overlay.color = Color("153e4b")
 	start_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1380,12 +1381,14 @@ func show_start() -> void:
 	start_layout.add_child(introduction)
 	var wordmark: Label = label("A E R O R O U T E", 20, DARK, true)
 	introduction.add_child(wordmark)
-	introduction.add_child(label("Bygg ditt flygbolag", 20, INK, true))
-	introduction.add_child(label("Välj en startflygplats. Dra sedan linjer direkt mellan flygplatser på kartan.", 13, MUTED))
+	introduction.add_child(label("Skapa ditt flygbolag", 19, INK, true))
+	start_intro_label = label("Börja med att välja land.", 13, MUTED)
+	introduction.add_child(start_intro_label)
 	introduction.add_child(line_break())
-	introduction.add_child(label("HUVUDFLYGPLATS", 11, MUTED, true))
+	start_step_label = label("VÄLJ LAND", 11, MUTED, true)
+	introduction.add_child(start_step_label)
 	start_search = LineEdit.new()
-	start_search.placeholder_text = "Sök ICAO, IATA eller stad"
+	start_search.placeholder_text = "Sök land"
 	start_search.custom_minimum_size.y = 48.0
 	start_search.clear_button_enabled = true
 	introduction.add_child(start_search)
@@ -1399,15 +1402,27 @@ func show_start() -> void:
 	start_selection_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	start_selection_label.clip_text = true
 	choices_column.add_child(start_selection_label)
+	start_country_back = button("BYT LAND", false)
+	start_country_back.visible = false
+	start_country_back.custom_minimum_size.y = 39.0
+	choices_column.add_child(start_country_back)
+	start_country_back.pressed.connect(func() -> void:
+		_select_start_country("")
+	)
+	start_begin_button = button("STARTA FLYGBOLAG")
+	start_begin_button.custom_minimum_size.y = 53.0
+	start_begin_button.visible = false
+	start_begin_button.disabled = true
+	choices_column.add_child(start_begin_button)
 	start_search.text_changed.connect(_update_start_choices)
 	_update_start_choices("")
-	start_begin_button = button("STARTA FLYGBOLAG  →")
-	start_begin_button.custom_minimum_size.y = 53.0
-	choices_column.add_child(start_begin_button)
 	_refresh_layout()
 	start_begin_button.pressed.connect(func() -> void:
-		if not game.can_start_at(start_choice_code):
-			start_selection_label.text = "Välj en giltig startflygplats"
+		if start_country.is_empty() or not game.can_start_at(start_choice_code):
+			start_selection_label.text = "Välj en flygplats för din HUB"
+			return
+		if str(game.airport(start_choice_code).get("country", "")) != start_country:
+			start_selection_label.text = "Välj en HUB i ditt land"
 			return
 		start_search.release_focus()
 		game.begin(start_choice_code)
@@ -1416,36 +1431,86 @@ func show_start() -> void:
 		start_overlay = null
 		world_map.center_on(game.home)
 		show_tab("map")
-		toast("Håll på en flygplats och dra till nästa för en linje")
+		toast("Välj NY LINJE när du vill öppna en flyglinje")
 	)
 
+func _country_display_name(country: String) -> String:
+	var names: Dictionary = {"Sweden":"Sverige", "Norway":"Norge", "Denmark":"Danmark",
+		"Finland":"Finland", "Germany":"Tyskland", "United Kingdom":"Storbritannien",
+		"United States":"USA", "United Arab Emirates":"Förenade Arabemiraten",
+		"France":"Frankrike", "Spain":"Spanien", "Italy":"Italien", "Netherlands":"Nederländerna"}
+	return str(names.get(country, country))
+
+func _select_start_country(country: String) -> void:
+	start_country = country
+	start_choice_code = ""
+	start_search.text = ""
+	start_search.release_focus()
+	start_country_back.visible = not country.is_empty()
+	start_begin_button.visible = not country.is_empty()
+	start_begin_button.disabled = true
+	start_step_label.text = "VÄLJ LAND" if country.is_empty() else "VÄLJ DIN HUB"
+	start_intro_label.text = "Börja med att välja land." if country.is_empty() else ("Valfri flygplats i " + _country_display_name(country))
+	start_search.placeholder_text = "Sök land" if country.is_empty() else "Sök flygplats, stad eller ICAO"
+	_update_start_choices("")
+
 func _update_start_choices(search_text: String) -> void:
+	if start_choices == null:
+		return
 	clear_children(start_choices)
-	var options: Array = []
 	var q: String = search_text.to_lower().strip_edges()
-	if q.is_empty():
-		for code in ["ESSA", "EGLL", "WSSS", "OMDB"]:
-			if game.airports_by_code.has(code) and game.can_start_at(code):
-				options.append(game.airport(code))
-	else:
+	if start_country.is_empty():
+		# Only one country picker is displayed, never the entire global list.
+		var countries: Array = []
+		var seen: Dictionary = {}
 		for airport in game.airports:
-			var code: String = str(airport["icao"])
-			if not game.is_featured(code):
+			var country: String = str(airport.get("country", ""))
+			if country.is_empty() or seen.has(country):
 				continue
-			var searchable: String = "%s %s %s %s" % [code, airport["iata"], airport["name"], airport["country"]]
-			if searchable.to_lower().contains(q) and game.can_start_at(code):
-				options.append(airport)
-		options.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-			var prefix_a: bool = str(a["icao"]).to_lower().begins_with(q) or str(a["iata"]).to_lower().begins_with(q)
-			var prefix_b: bool = str(b["icao"]).to_lower().begins_with(q) or str(b["iata"]).to_lower().begins_with(q)
-			if prefix_a != prefix_b:
-				return prefix_a
-			return int(a["rank"]) > int(b["rank"])
-		)
-	for i in range(mini(4, options.size())):
-		var airport: Dictionary = options[i]
+			seen[country] = true
+			countries.append(country)
+		countries.sort()
+		var options: Array = []
+		if q.is_empty():
+			for item in ["Sweden", "United Kingdom", "United States", "Germany"]:
+				if seen.has(item):
+					options.append(item)
+		else:
+			for country in countries:
+				var display: String = _country_display_name(str(country))
+				if str(country).to_lower().contains(q) or display.to_lower().contains(q):
+					options.append(country)
+			options.sort_custom(func(a: String, b: String) -> bool:
+				return _country_display_name(a).to_lower() < _country_display_name(b).to_lower()
+			)
+		for i in range(mini(4, options.size())):
+			var country_code: String = str(options[i])
+			var country_choice: Button = button(_country_display_name(country_code), false)
+			country_choice.custom_minimum_size.y = 45.0
+			start_choices.add_child(country_choice)
+			country_choice.pressed.connect(func() -> void: _select_start_country(country_code))
+		start_selection_label.text = "Sök ett land för att börja" if not q.is_empty() and options.is_empty() else "LAND"
+		start_begin_button.visible = false
+		return
+	var airports_here: Array = []
+	for airport in game.airports:
+		if str(airport.get("country", "")) != start_country:
+			continue
 		var code: String = str(airport["icao"])
-		var fullname: String = str(airport["name"])
+		var searchable: String = "%s %s %s" % [code, str(airport.get("iata", "")), str(airport.get("name", ""))]
+		if q.is_empty() or searchable.to_lower().contains(q):
+			airports_here.append(airport)
+	airports_here.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if not q.is_empty():
+			var match_a: bool = str(a["icao"]).to_lower().begins_with(q) or str(a.get("iata", "")).to_lower().begins_with(q)
+			var match_b: bool = str(b["icao"]).to_lower().begins_with(q) or str(b.get("iata", "")).to_lower().begins_with(q)
+			if match_a != match_b:
+				return match_a
+		return int(a.get("rank", 0)) > int(b.get("rank", 0))
+	)
+	for i in range(mini(4, airports_here.size())):
+		var airport: Dictionary = airports_here[i]
+		var code: String = str(airport["icao"])
 		var choice: Button = button("", false)
 		choice.toggle_mode = true
 		choice.custom_minimum_size.y = 47.0
@@ -1458,9 +1523,11 @@ func _update_start_choices(search_text: String) -> void:
 			_update_start_selected_visual()
 		)
 	_update_start_selected_visual()
+	if airports_here.is_empty():
+		start_selection_label.text = "Inga flygplatser hittades"
 
 func _update_start_selected_visual() -> void:
-	if start_selection_label == null:
+	if start_country.is_empty() or start_selection_label == null:
 		return
 	for node in start_choices.get_children():
 		if not (node is Button):
@@ -1469,8 +1536,8 @@ func _update_start_selected_visual() -> void:
 		var code: String = str(airport_button.get_meta("airport_code", ""))
 		var airport: Dictionary = game.airport(code)
 		var name_short: String = str(airport.get("name", code))
-		if name_short.length() > 29:
-			name_short = name_short.substr(0, 28).strip_edges() + "…"
+		if name_short.length() > 28:
+			name_short = name_short.substr(0, 27).strip_edges() + "…"
 		var selected: bool = code == start_choice_code
 		airport_button.text = (">  " if selected else "   ") + code + " · " + name_short
 		airport_button.set_pressed_no_signal(selected)
@@ -1484,11 +1551,8 @@ func _update_start_selected_visual() -> void:
 		airport_button.add_theme_stylebox_override("pressed", background)
 		airport_button.add_theme_stylebox_override("hover", background)
 	var selected_airport: Dictionary = game.airport(start_choice_code)
-	if selected_airport.is_empty():
-		start_selection_label.text = "Välj en flygplats"
-	else:
-		start_selection_label.text = "VALD: %s · %s" % [start_choice_code, str(selected_airport["name"])]
-
+	start_selection_label.text = "VÄLJ HUB" if selected_airport.is_empty() else ("HUB: " + start_choice_code)
+	start_begin_button.disabled = selected_airport.is_empty()
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and game != null:
 		game.save_game()
