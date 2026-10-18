@@ -544,8 +544,8 @@ func _run() -> void:
 	for node in view.sheet_body.find_children("*", "Button", true, false):
 		if node is Button and node.text.contains("säten"):
 			aircraft_actions += 1
-	if aircraft_actions < 5:
-		_fail("Aircraft picker must list real alternative models")
+	if aircraft_actions < 1 or aircraft_actions > 3:
+		_fail("Aircraft picker should offer one to three relevant models, not the complete catalog")
 		return
 	# Multiple connected routes must not imply changing every plane at once.
 	var second_model: Dictionary = view.game.initial_plane("ESSA", "ESGG")
@@ -621,11 +621,11 @@ func _run() -> void:
 	if not view.quote_card.visible or not view.quote_label.text.contains(view.game.money(float(cost_quote["price"]))):
 		_fail("Route price HUD must show real price while dragging")
 		return
-	if not view.quote_label.text.contains("Plan ") or not view.quote_label.text.contains("flygplats ") or not view.quote_label.text.contains("linje "):
-		_fail("Route quote does not explain aircraft, airport and distance costs")
+	if view.quote_label.text.count("\n") != 1 or view.quote_label.text.contains("flygplats ") or view.quote_label.text.contains("PROGNOS"):
+		_fail("Route HUD must stay compact and hide accounting detail during drag")
 		return
-	if not view.quote_label.text.contains("KVAR:") or not view.quote_label.text.contains("PROGNOS"):
-		_fail("Route quote must show remaining balance and estimated flight profit")
+	if not view.quote_label.text.contains("/ flyg"):
+		_fail("Route preview must retain a useful one-line expected flight return")
 		return
 	view.game.cash = 0.0
 	var poor_quote: Dictionary = view.game.route_quote("ESSA", "ESMS")
@@ -795,13 +795,55 @@ func _run() -> void:
 		_fail("Ticket slider did not refresh live profit forecast on the visible screen")
 		return
 	view.show_plane_picker(managed_id)
-	var profit_comparison_found: bool = false
-	for entry in view.sheet.find_children("*", "Button", true, false):
-		if (entry as Button).text.contains("Prognos") and (entry as Button).text.contains("beläggning"):
-			profit_comparison_found = true
-			break
-	if not profit_comparison_found:
-		_fail("Aircraft picker does not compare real profit and passenger load")
+	var compact_aircraft: int = 0
+	for entry in view.sheet_body.find_children("*", "Button", true, false):
+		if (entry as Button).text.contains("platser"):
+			compact_aircraft += 1
+	if compact_aircraft < 1 or compact_aircraft > 3:
+		_fail("Aircraft picker must show only a few relevant purchase choices")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: live fares and aircraft profitability, consistent prices and physical portrait/landscape resize")
+	# iPhone UX: the user only sees aircraft they actually operate.
+	view.show_tab("fleet")
+	await process_frame
+	var owned_aircraft_buttons: int = 0
+	for entry in view.content_body.find_children("*", "Button", true, false):
+		if (entry as Button).text.contains("→"):
+			owned_aircraft_buttons += 1
+	if owned_aircraft_buttons != view.game.routes.size():
+		_fail("Fleet tab must show exactly the user's owned aircraft, not the catalog")
+		return
+	if view.content_body.find_children("*", "Label", true, false).size() > 10:
+		_fail("Fleet is still overloaded with aircraft specification labels")
+		return
+	var away: InputEventMouseButton = InputEventMouseButton.new()
+	away.button_index = MOUSE_BUTTON_LEFT
+	away.pressed = true
+	away.position = Vector2(330, 260)
+	view._input(away)
+	await process_frame
+	if view.active_tab != "map" or view.content_view.visible:
+		_fail("Tapping map above fleet panel must return immediately to map")
+		return
+	view.show_plane_picker(managed_id)
+	await process_frame
+	if not view.sheet.visible or not view.shade.visible:
+		_fail("Airplane picker needs visible but non-blocking modal shell")
+		return
+	if view.shade.color.a > 0.20:
+		_fail("Aircraft panel dims the whole game excessively")
+		return
+	for entry in view.sheet_body.find_children("*", "Button", true, false):
+		var option: Button = entry as Button
+		if option.disabled and option.text.contains("platser"):
+			var readable: Color = option.get_theme_color("font_disabled_color")
+			if readable.r > 0.45 and readable.g > 0.45 and readable.b > 0.45:
+				_fail("Unavailable aircraft buttons still render near-white text on gray")
+				return
+	away.position = Vector2(330, 260)
+	view._input(away)
+	await process_frame
+	if view.current_sheet != "" or view.sheet.visible or view.shade.visible or not view.map_gesture_active():
+		_fail("Tapping the visible map did not close modal and release gestures")
+		return
+	print("AEROROUTE GUI SMOKE PASSED: compact pricing and fleet, outside-map dismissal, readable aircraft options, portrait/landscape")
 	quit(0)
