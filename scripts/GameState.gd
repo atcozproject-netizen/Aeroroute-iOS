@@ -421,6 +421,38 @@ func projected(r: Dictionary) -> Dictionary:
 		"cost": cost, "net": rounded(revenue - cost), "load": roundi(100.0 * pax / maxf(1.0, float(seats))), "bonus": bonus,
 		"label": str(market["label"]), "distance": dist}
 
+func fare_recommendation(route_id: String) -> Dictionary:
+	# Scan actual modelled demand, rather than increasing prices arbitrarily.
+	# This is a forecast, not a guaranteed result: completed flights vary.
+	var route: Dictionary = get_route(route_id)
+	if route.is_empty():
+		return {}
+	var current: Dictionary = projected(route)
+	if current.is_empty():
+		return {}
+	var dist: float = kilometers(str(route["from"]), str(route["to"]))
+	var reference_fare: float = maxf(0.1, rounded(0.85 + dist * 0.00028))
+	var upper: float = maxf(2.5, reference_fare * 2.1)
+	var best_fare: float = float(route.get("fare", reference_fare))
+	var best_net: float = float(current["net"])
+	var best_load: int = int(current["load"])
+	var best_pax: float = float(current["pax"])
+	var candidate: Dictionary = route.duplicate(true)
+	var steps: int = floori((upper - 0.55) / 0.05)
+	for i in range(steps + 1):
+		var trial_fare: float = rounded(0.55 + float(i) * 0.05)
+		candidate["fare"] = trial_fare
+		var trial: Dictionary = projected(candidate)
+		var trial_net: float = float(trial.get("net", -999999.0))
+		# On a tie, prefer the lower fare with more passengers.
+		if trial_net > best_net + 0.004 or (absf(trial_net - best_net) <= 0.004 and float(trial.get("pax", 0.0)) > best_pax):
+			best_fare = trial_fare
+			best_net = trial_net
+			best_load = int(trial["load"])
+			best_pax = float(trial["pax"])
+	return {"fare":best_fare, "net":best_net, "load":best_load,
+		"pax":best_pax, "gain":rounded(best_net - float(current["net"]))}
+
 func network_snapshot() -> Dictionary:
 	# Informational network analytics; no XP requirements or hard objectives.
 	var net_per_rotation: float = 0.0
