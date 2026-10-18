@@ -84,6 +84,34 @@ func _run() -> void:
 	if not search.has_focus():
 		_fail("Country selection search cannot receive focus")
 		return
+	# A genuine small Swedish airport must be selectable, not merely in data.
+	search.text = "Sverige"
+	search.text_changed.emit("Sverige")
+	await process_frame
+	if view.start_choices.get_child_count() == 0:
+		_fail("Swedish country alias returned no country")
+		return
+	_click((view.start_choices.get_child(0) as Button).get_global_rect().get_center())
+	await process_frame
+	if view.start_country != "Sweden":
+		_fail("Selecting Sverige did not choose Sweden")
+		return
+	search.text = "ESSP"
+	search.text_changed.emit("ESSP")
+	await process_frame
+	if view.start_choices.get_child_count() == 0 or not (view.start_choices.get_child(0) as Button).text.contains("ESSP"):
+		_fail("Regional airport ESSP is missing from Swedish HUB selection")
+		return
+	_click((view.start_choices.get_child(0) as Button).get_global_rect().get_center())
+	await process_frame
+	if view.start_choice_code != "ESSP" or view.start_begin_button.disabled:
+		_fail("Small airport could not become selected HUB")
+		return
+	_click(view.start_country_back.get_global_rect().get_center())
+	await process_frame
+	if view.start_country != "" or view.start_begin_button.visible:
+		_fail("Changing country did not reset the HUB selection")
+		return
 	search.text = "UAE"
 	search.text_changed.emit("UAE")
 	await process_frame
