@@ -652,6 +652,18 @@ func _layout_for_size(view_size: Vector2) -> void:
 		intro_style.content_margin_bottom = 8 if very_short else 13
 		if start_search != null:
 			start_search.custom_minimum_size.y = 38.0 if very_short else 48.0
+			start_search.add_theme_font_size_override("font_size", 12 if very_short else 14)
+			var input_skin: StyleBoxFlat = StyleBoxFlat.new()
+			input_skin.bg_color = Color("f2f5ee")
+			input_skin.border_color = Color("b3caca")
+			input_skin.border_width_bottom = 1
+			input_skin.set_corner_radius_all(9)
+			input_skin.content_margin_left = 9
+			input_skin.content_margin_right = 9
+			input_skin.content_margin_top = 3 if very_short else 8
+			input_skin.content_margin_bottom = 3 if very_short else 8
+			start_search.add_theme_stylebox_override("normal", input_skin)
+			start_search.add_theme_stylebox_override("focus", input_skin)
 		if start_begin_button != null:
 			start_begin_button.custom_minimum_size.y = 39.0 if very_short else 53.0
 		if start_choices != null:
