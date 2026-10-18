@@ -1019,6 +1019,9 @@ func show_route(id: String) -> void:
 	if not best.is_empty():
 		strategy_label.text = "Marknadsanalys: %s/biljett kan ge %s netto/flyg (%d%% beläggning)." % [game.money(float(best["fare"])), game.money(float(best["net"])), int(best["load"])]
 		sheet_body.add_child(strategy_label)
+	var smart_price: Button = button("ANVÄND FÖRESLAGET BILJETTPRIS", false)
+	smart_price.disabled = best.is_empty() or absf(float(best.get("fare", r["fare"])) - float(r["fare"])) < 0.004
+	sheet_body.add_child(smart_price)
 	slider.value_changed.connect(func(value: float) -> void:
 		r["fare"] = game.rounded(value)
 		fare_value.text = game.money(float(r["fare"]))
@@ -1028,16 +1031,15 @@ func show_route(id: String) -> void:
 			set_info_tile_value(cost_tile, game.money(float(estimate["cost"])))
 			set_info_tile_value(net_tile, game.money(float(estimate["net"])))
 			live_estimate.text = "Prognos: %d/%d platser  ·  %s netto/flyg" % [roundi(float(estimate["pax"])), int(estimate["seats"]), game.money(float(estimate["net"]))]
-		game.save_game()
-		game.changed.emit()
+		smart_price.disabled = best.is_empty() or absf(float(best.get("fare", r["fare"])) - float(r["fare"])) < 0.004
 	)
-	var smart_price: Button = button("ANVÄND FÖRESLAGET BILJETTPRIS", false)
-	smart_price.disabled = best.is_empty() or absf(float(best.get("fare", r["fare"])) - float(r["fare"])) < 0.004
-	sheet_body.add_child(smart_price)
+	slider.drag_ended.connect(func(_value_changed: bool) -> void: game.save_game())
+	slider.focus_exited.connect(func() -> void: game.save_game())
 	smart_price.pressed.connect(func() -> void:
 		if best.is_empty():
 			return
 		slider.value = float(best["fare"])
+		game.save_game()
 		smart_price.disabled = true
 		toast("Biljettpriset är justerat efter den aktuella efterfrågan")
 	)
