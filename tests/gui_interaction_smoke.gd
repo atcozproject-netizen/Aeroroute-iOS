@@ -356,6 +356,9 @@ func _run() -> void:
 		_fail("Minor airports must not clutter overview zoom")
 		return
 	map.zoom = 20.0
+	# A selected minor airport must always be visible even when an
+	# adjacent regional field wins automatic decluttering.
+	map.focused_airport = "ESSP"
 	await process_frame
 	visible_small = false
 	for candidate in map.candidate_airports():
