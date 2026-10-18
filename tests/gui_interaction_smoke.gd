@@ -509,7 +509,7 @@ func _run() -> void:
 	if header_height >= 135.0:
 		_fail("Cockpit dashboard still blocks too much of the map (end_y: %.1f)" % header_height)
 		return
-	if view.route_mode_button.get_parent() == view.zoom_buttons:
+	if view.route_mode_button.get_parent() == view.zoom_buttons or view.zoom_buttons.visible or view.follow_button.visible or view.clock_dock.visible:
 		_fail("Create-line game action is still buried among zoom controls")
 		return
 	if view.route_mode_button.get_global_rect().position.y < view.size.y - 220.0:
@@ -703,8 +703,8 @@ func _run() -> void:
 	view.world_map._process(0.14)
 	view.world_map.handle_motion(dest_point)
 	await process_frame
-	if not view.quote_card.visible or not view.quote_label.text.contains("ESSA → EKCH"):
-		_fail("Moving finger from one airport to another did not preview its cost")
+	if view.quote_card.visible or view.world_map.gesture_kind == "route":
+		_fail("Browsing the map must never show an accidental route price overlay")
 		return
 	view.world_map.reset_gesture()
 	await process_frame
@@ -727,22 +727,22 @@ func _run() -> void:
 		_fail("Landscape navigation/modal geometry invalid")
 		return
 	var wide: Rect2 = Rect2(Vector2.ZERO, view.size)
-	for widget in [view.cockpit_background, view.clock_dock, view.nav_bar, view.route_mode_button, view.follow_button]:
+	for widget in [view.cockpit_background, view.nav_bar, view.route_mode_button]:
 		var bounds: Rect2 = widget.get_global_rect()
 		if bounds.position.x < -1.0 or bounds.position.y < -1.0 or bounds.end.x > wide.end.x + 1.0 or bounds.end.y > wide.end.y + 1.0:
 			_fail("Landscape gameplay control outside real screen: " + widget.name)
 			return
-	if view.cockpit_background.get_global_rect().intersects(view.clock_dock.get_global_rect()):
+	if view.clock_dock.visible and view.cockpit_background.get_global_rect().intersects(view.clock_dock.get_global_rect()):
 		_fail("Landscape header and flight dock overlap")
 		return
-	if view.route_mode_button.get_global_rect().intersects(view.nav_bar.get_global_rect()) or view.follow_button.get_global_rect().intersects(view.nav_bar.get_global_rect()):
+	if view.route_mode_button.get_global_rect().intersects(view.nav_bar.get_global_rect()):
 		_fail("Landscape route actions overlap navigation")
 		return
 	if view.sheet.get_global_rect().intersects(view.nav_bar.get_global_rect()):
 		_fail("Landscape route information panel overlaps the bottom navigation")
 		return
-	if view.zoom_buttons.columns != 4:
-		_fail("Zoom/FIR map controls still use a tall portrait column in landscape")
+	if view.zoom_buttons.visible or view.clock_dock.visible or view.follow_button.visible:
+		_fail("Secondary controls still clutter landscape map")
 		return
 	for compact_size in [Vector2i(740, 320),Vector2i(667, 280)]:
 		root.size = compact_size
@@ -750,7 +750,7 @@ func _run() -> void:
 		await process_frame
 		view._refresh_layout()
 		var area: Rect2 = Rect2(Vector2.ZERO,view.size)
-		for widget in [view.cockpit_background,view.clock_dock,view.nav_bar,view.zoom_buttons,view.route_mode_button,view.follow_button]:
+		for widget in [view.cockpit_background,view.nav_bar,view.route_mode_button]:
 			var bounds: Rect2 = widget.get_global_rect()
 			if bounds.position.x < -1.0 or bounds.position.y < -1.0 or bounds.end.x > area.end.x + 1.0 or bounds.end.y > area.end.y + 1.0:
 				_fail("Short landscape control outside screen: "+widget.name+" at "+str(compact_size))
@@ -760,7 +760,7 @@ func _run() -> void:
 		if not view.quote_card.visible or view.quote_label.text.count("\n") != 1:
 			_fail("Landscape cost preview must use readable two-line compact presentation")
 			return
-		if tip.intersects(view.nav_bar.get_global_rect()) or tip.intersects(view.zoom_buttons.get_global_rect()) or tip.intersects(view.route_mode_button.get_global_rect()) or tip.intersects(view.follow_button.get_global_rect()):
+		if tip.intersects(view.nav_bar.get_global_rect()) or tip.intersects(view.route_mode_button.get_global_rect()):
 			_fail("Landscape route cost preview obscures other game controls")
 			return
 		view._update_route_quote({})
