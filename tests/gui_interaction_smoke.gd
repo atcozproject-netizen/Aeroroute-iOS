@@ -586,9 +586,11 @@ func _run() -> void:
 			node.pressed.emit()
 			break
 	await process_frame
-	if view.current_sheet != "aircraft" or view.current_route != route_id:
-		_fail("Airport's connected route did not open its aircraft picker")
+	if view.current_sheet != "route" or view.current_route != route_id:
+		_fail("Airport's connected line did not show simple route controls")
 		return
+	view.show_plane_picker(route_id)
+	await process_frame
 	var aircraft_actions: int = 0
 	for node in view.sheet_body.find_children("*", "Button", true, false):
 		if node is Button and node.text.contains("säten"):
@@ -635,8 +637,8 @@ func _run() -> void:
 	view.world_map.handle_press(hit)
 	view.world_map.handle_release(hit)
 	await process_frame
-	if view.current_sheet != "aircraft" or view.current_route != route_id:
-		_fail("Touching drawn flight route did not open plane list")
+	if view.current_sheet != "route" or view.current_route != route_id:
+		_fail("Touching drawn flight route did not open its main route controls")
 		return
 	var replacement: Dictionary = {}
 	for p in view.game.catalog:
