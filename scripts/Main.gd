@@ -64,7 +64,7 @@ var ui_seconds: float = 0.0
 var flight_eta: Label
 var search_line: LineEdit
 var search_results: VBoxContainer
-var zoom_buttons: VBoxContainer
+var zoom_buttons: GridContainer
 var follow_button: Button
 
 func _ready() -> void:
@@ -315,7 +315,10 @@ func create_scene() -> void:
 		tab_buttons[id] = b
 
 	# Map controls remain accessible without pinch gestures and offer quick recentering.
-	zoom_buttons = stack(6)
+	zoom_buttons = GridContainer.new()
+	zoom_buttons.columns = 1
+	zoom_buttons.add_theme_constant_override("h_separation", 6)
+	zoom_buttons.add_theme_constant_override("v_separation", 6)
 	zoom_buttons.anchor_left = 1.0
 	zoom_buttons.anchor_right = 1.0
 	zoom_buttons.offset_left = -61.0
@@ -531,7 +534,7 @@ func _update_route_quote(quote: Dictionary) -> void:
 	var style: StyleBoxFlat = quote_card.get_theme_stylebox("panel") as StyleBoxFlat
 	style.bg_color = Color("1b6559") if is_ok else Color("713f49") if destination != "" else Color("204959")
 	if destination == "":
-		quote_label.text = "DRA TILL EN FLYGPLATS\nPriset visas när fingret når markören"
+		quote_label.text = "DRA TILL FLYGPLATS" if viewport_layout_mode == "landscape" else "DRA TILL EN FLYGPLATS\nPriset visas när fingret når markören"
 	elif price < 0.0:
 		quote_label.text = "%s → %s · EJ MÖJLIG\n%s" % [quote["from"], destination, reason]
 	else:
@@ -543,7 +546,12 @@ func _update_route_quote(quote: Dictionary) -> void:
 		var pax: int = roundi(float(quote.get("estimated_pax", 0.0)))
 		var seats: int = int(quote.get("available_seats", 0))
 		var forecast_text: String = "PROGNOS %s/flyg  ·  %d/%d passagerare" % [game.money(estimated_net), pax, seats]
-		if is_ok:
+		if viewport_layout_mode == "landscape":
+			var status: String = "KVAR %s" % game.money(float(quote["remaining"])) if is_ok else reason
+			quote_label.text = "%s → %s · %s  ·  %s/flyg\nPlan %s · flygplats %s · linje %s · %s" % [
+				quote["from"], destination, game.money(price), game.money(estimated_net),
+				game.money(amount_aircraft), game.money(amount_airport), game.money(amount_route), status]
+		elif is_ok:
 			quote_label.text = "%s → %s    TOTALT %s\n%s\n✓ KVAR: %s\n%s" % [quote["from"], destination, game.money(price), detail, game.money(float(quote["remaining"])), forecast_text]
 		else:
 			quote_label.text = "%s → %s    TOTALT %s\n%s\n%s\n%s" % [quote["from"], destination, game.money(price), detail, reason, forecast_text]
@@ -564,9 +572,13 @@ func _layout_for_size(view_size: Vector2) -> void:
 	cockpit_top.anchor_right = 0.0 if landscape else 1.0
 	cockpit_top.offset_left = 19.0
 	cockpit_top.offset_right = cockpit_width - 19.0 if landscape else -19.0
-	zoom_buttons.offset_top = 113.0 if landscape else 143.0
-	zoom_buttons.offset_left = -52.0 if landscape else -61.0
+	zoom_buttons.columns = 4 if landscape else 1
+	zoom_buttons.offset_top = 84.0 if landscape else 143.0
+	zoom_buttons.offset_left = -224.0 if landscape else -61.0
 	zoom_buttons.offset_right = -8.0 if landscape else -13.0
+	for zoom_control in zoom_buttons.get_children():
+		if zoom_control is Control:
+			zoom_control.custom_minimum_size = Vector2(48.0, 42.0) if landscape else Vector2(48.0, 48.0)
 	nav_bar.anchor_left = 0.0
 	nav_bar.anchor_right = 0.0 if landscape else 1.0
 	nav_bar.offset_left = 8.0 if landscape else 10.0
@@ -601,12 +613,14 @@ func _layout_for_size(view_size: Vector2) -> void:
 	follow_button.offset_top = route_mode_button.offset_top
 	follow_button.offset_bottom = route_mode_button.offset_bottom
 	if quote_card != null:
+		quote_card.anchor_left = 1.0 if landscape else 0.5
+		quote_card.anchor_right = 1.0 if landscape else 0.5
 		quote_card.anchor_top = 0.0 if landscape else 1.0
 		quote_card.anchor_bottom = 0.0 if landscape else 1.0
-		quote_card.offset_top = 115.0 if landscape else -332.0
-		quote_card.offset_bottom = 229.0 if landscape else -218.0
-		quote_card.offset_left = -182.0 if landscape else -169.0
-		quote_card.offset_right = 182.0 if landscape else 169.0
+		quote_card.offset_top = 142.0 if landscape else -332.0
+		quote_card.offset_bottom = 207.0 if landscape else -218.0
+		quote_card.offset_left = -minf(420.0, view_size.x * 0.63) if landscape else -169.0
+		quote_card.offset_right = -8.0 if landscape else 169.0
 	if shade != null:
 		shade.color = Color(0.12, 0.27, 0.32, 0.18 if landscape else 0.36)
 	if sheet != null:
@@ -629,8 +643,22 @@ func _layout_for_size(view_size: Vector2) -> void:
 			sheet.offset_top = -minf(555.0, view_size.y * 0.73)
 			sheet.offset_bottom = -62.0
 	if start_layout != null and is_instance_valid(start_layout) and start_welcome != null and is_instance_valid(start_welcome):
+		var very_short: bool = landscape and view_size.y < 365.0
 		start_layout.columns = 2 if landscape else 1
+		start_layout.add_theme_constant_override("v_separation", 5 if very_short else 8)
 		start_welcome.custom_minimum_size.x = minf(view_size.x - 32.0, 740.0) if landscape else minf(maxf(view_size.x - 26.0, 282.0), 376.0)
+		var intro_style: StyleBoxFlat = start_welcome.get_theme_stylebox("panel") as StyleBoxFlat
+		intro_style.content_margin_top = 8 if very_short else 13
+		intro_style.content_margin_bottom = 8 if very_short else 13
+		if start_search != null:
+			start_search.custom_minimum_size.y = 38.0 if very_short else 48.0
+		if start_begin_button != null:
+			start_begin_button.custom_minimum_size.y = 39.0 if very_short else 53.0
+		if start_choices != null:
+			for i in range(start_choices.get_child_count()):
+				var choice: Control = start_choices.get_child(i) as Control
+				choice.visible = not very_short or i < 3
+				choice.custom_minimum_size.y = 38.0 if very_short else 47.0
 	if content_view != null:
 		if landscape:
 			content_view.anchor_left = 1.0
