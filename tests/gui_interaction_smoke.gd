@@ -232,8 +232,8 @@ func _run() -> void:
 	if view.profit_layer.effects.size() < 2 or not str(view.profit_layer.effects[1]["amount"]).contains("8.5"):
 		_fail("Negative flight income did not animate")
 		return
-	if not view.fir_layer.loaded or not view.fir_layer.enabled or view.fir_layer.regions.size() < 200:
-		_fail("FIR display is not loaded and enabled with worldwide regions")
+	if view.fir_layer.enabled or view.fir_layer.display_mode != 0:
+		_fail("FIR boundaries must be hidden by default to reduce map clutter")
 		return
 	if view.route_mode_button == null:
 		_fail("Dedicated route mode toggle missing")
@@ -253,25 +253,19 @@ func _run() -> void:
 	if view.current_sheet != "planner" or view.route_mode or view.route_origin != "":
 		_fail("Two airport selections did not open route planner and clear gesture mode")
 		return
-	# FIR must start in a quiet, boundary-only mode and cycle through
-	# boundaries+names -> off -> boundaries, rather than drawing a label jungle.
-	if view.fir_layer.display_mode != 1:
-		_fail("Default FIR display mode must be subtle boundaries without labels")
-		return
+	# Advanced FIR data remains available but never clutters the initial map.
 	view.fir_button.pressed.emit()
 	await process_frame
+	if view.fir_layer.display_mode != 1 or not view.fir_layer.loaded or view.fir_layer.regions.size() < 200:
+		_fail("Optional FIR mode failed to load valid map boundaries")
+		return
+	view.fir_button.pressed.emit()
 	if view.fir_layer.display_mode != 2:
-		_fail("FIR+ mode was not enabled by the mode button")
+		_fail("Optional FIR label mode did not activate")
 		return
 	view.fir_button.pressed.emit()
-	await process_frame
 	if view.fir_layer.display_mode != 0 or view.fir_layer.enabled:
-		_fail("FIR button could not hide FIR overlay")
-		return
-	view.fir_button.pressed.emit()
-	await process_frame
-	if view.fir_layer.display_mode != 1:
-		_fail("FIR button could not restore subtle borders")
+		_fail("Optional FIR mode did not return to clean map")
 		return
 
 	# Pan is ALWAYS the default behavior, even when a finger begins
@@ -323,8 +317,7 @@ func _run() -> void:
 		_fail("Completed normal pan retained stale touch capture")
 		return
 
-	# The Fly Corp-like route gesture needs only a brief hold on the
-	# airport marker; no modal or secondary route selection at all.
+	# A long press followed by a drag MUST stay a map pan, never a route.
 	view.game.cash = 12000.0
 	view.world_map.center_on("OMDB")
 	await process_frame
@@ -334,8 +327,8 @@ func _run() -> void:
 	root.push_input(down, true)
 	view.world_map._process(0.14)
 	view.world_map._process(0.14)
-	if view.world_map.gesture_kind != "route":
-		_fail("Long press did not arm deliberate route creation")
+	if view.world_map.gesture_kind == "route":
+		_fail("Implicit long press still arms route creation")
 		return
 	move_event.position = to_pos
 	move_event.relative = to_pos - from_pos
@@ -344,17 +337,38 @@ func _run() -> void:
 	root.push_input(up, true)
 	await process_frame
 	var built_id: String = view.game.route_key(str(source_airport["code"]), str(destination_airport["code"]))
-	if view.game.get_route(built_id).is_empty() or view.current_sheet != "":
-		_fail("Direct drag should immediately open a route without a route picker")
+	if not view.game.get_route(built_id).is_empty() or view.current_sheet == "planner":
+		_fail("Map browsing accidentally opened a route after dragging")
 		return
+	if view.world_map.gesture_captured or not view.world_map.pointers.is_empty():
+		_fail("Ordinary swipe retained gesture capture after release")
+		return
+	# Only the explicit NEW ROUTE control authorizes two airport picks.
+	view.route_mode_button.button_pressed = true
+	await process_frame
+	view._airport_tapped(str(source_airport["code"]))
+	view._airport_tapped(str(destination_airport["code"]))
+	await process_frame
+	if view.current_sheet != "planner":
+		_fail("Explicit two-tap route mode did not open a purchase confirmation")
+		return
+	if not view.game.get_route(built_id).is_empty():
+		_fail("Opening the planner purchased a route without confirmation")
+		return
+	var confirm_route: Button = null
+	for node in view.sheet_body.find_children("*", "Button", true, false):
+		if (node as Button).text == "ÖPPNA LINJE":
+			confirm_route = node as Button
+	if confirm_route == null or confirm_route.disabled:
+		_fail("Explicit route planner has no affordable purchase confirmation")
+		return
+	confirm_route.pressed.emit()
+	await process_frame
 	var new_route: Dictionary = view.game.get_route(built_id)
-	if new_route.get("plane", "") == "":
-		_fail("Direct route was created without its automatic aircraft")
+	if new_route.is_empty() or str(new_route.get("plane", "")) == "":
+		_fail("Confirmed route did not create its aircraft and new line")
 		return
 	view.game.routes.erase(new_route)
-	if view.world_map.gesture_captured or not view.world_map.pointers.is_empty():
-		_fail("Finished long-press drag retained stale touch state")
-		return
 
 	# Two-finger gesture must never trigger route creation, and may
 	# transition into single-finger map panning safely.
@@ -520,7 +534,7 @@ func _run() -> void:
 		_fail("Touching the map failed to stop automatic flight tracking")
 		return
 	view.world_map.reset_gesture()
-	if view.route_mode_button.text != "DRA NY LINJE":
+	if view.route_mode_button.text != "NY LINJE":
 		_fail("Primary action failed to reset after leaving route mode")
 		return
 	_click(view.route_mode_button.get_global_rect().get_center())
