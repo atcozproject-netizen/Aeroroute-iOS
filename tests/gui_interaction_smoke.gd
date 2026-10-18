@@ -852,5 +852,27 @@ func _run() -> void:
 	if view.current_sheet != "" or view.sheet.visible or view.shade.visible or not view.map_gesture_active():
 		_fail("Tapping the visible map did not close modal and release gestures")
 		return
+	# Repeat through the real viewport path for an iPhone touch (not just
+	# a direct method call), and reject map drags leaking through the popup.
+	view.show_plane_picker(managed_id)
+	await process_frame
+	var finger_down: InputEventScreenTouch = InputEventScreenTouch.new()
+	finger_down.index = 0
+	finger_down.pressed = true
+	finger_down.position = Vector2(330, 260)
+	root.push_input(finger_down, true)
+	await process_frame
+	if view.current_sheet != "" or view.sheet.visible:
+		_fail("Actual screen touch outside the sheet did not close the panel")
+		return
+	var finger_up: InputEventScreenTouch = InputEventScreenTouch.new()
+	finger_up.index = 0
+	finger_up.pressed = false
+	finger_up.position = finger_down.position
+	root.push_input(finger_up, true)
+	await process_frame
+	if view.world_map.gesture_captured or not view.map_gesture_active():
+		_fail("Outside-tap dismissal accidentally captured the map gesture")
+		return
 	print("AEROROUTE GUI SMOKE PASSED: compact pricing and fleet, outside-map dismissal, readable aircraft options, portrait/landscape")
 	quit(0)
