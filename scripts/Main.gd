@@ -755,6 +755,13 @@ func info_tile(title: String, value: String) -> PanelContainer:
 	v.add_child(label(value, 15, INK, true))
 	return panel
 
+func set_info_tile_value(tile: PanelContainer, value: String) -> void:
+	var contents: VBoxContainer = tile.get_child(0) as VBoxContainer
+	if contents != null and contents.get_child_count() > 1:
+		var value_label: Label = contents.get_child(1) as Label
+		if value_label != null:
+			value_label.text = value
+
 func update_map_status() -> void:
 	if map_status == null:
 		return
@@ -909,8 +916,15 @@ func show_plane_picker(route_id: String) -> void:
 		var affordable: bool = price <= game.cash
 		var money_label: String = "ANVÄNDS" if existing else "FÖR KORT RÄCKVIDD" if not valid_range else ("FÅ " + game.money(-price)) if price < 0.0 else ("BETALA " + game.money(price))
 		var text_value: String = "%s  ·  %d säten  ·  %s" % [str(model["name"]), int(model["seats"]), money_label]
+		if valid_range:
+			var simulation: Dictionary = route.duplicate(true)
+			simulation["plane"] = id
+			var estimate: Dictionary = game.projected(simulation)
+			if not estimate.is_empty():
+				text_value += "\nPrognos %s netto/flyg  ·  %d%% beläggning" % [game.money(float(estimate["net"])), int(estimate["load"])]
 		var option: Button = button(text_value, existing)
-		option.custom_minimum_size.y = 47.0
+		option.custom_minimum_size.y = 66.0 if valid_range else 48.0
+		option.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		option.disabled = existing or not valid_range or not affordable
 		sheet_body.add_child(option)
 		option.pressed.connect(func() -> void:
@@ -974,9 +988,12 @@ func show_route(id: String) -> void:
 	heading("DIN FLYGLINJE", str(r["from"]) + " ↔ " + str(r["to"]), game.distance_label(str(r["from"]), str(r["to"])))
 	var cols: HBoxContainer = row(6)
 	sheet_body.add_child(cols)
-	cols.add_child(info_tile("INTÄKTER / FLYG", game.money(float(projection["revenue"]))))
-	cols.add_child(info_tile("KOSTNADER / FLYG", game.money(float(projection["cost"]))))
-	cols.add_child(info_tile("NETTO / FLYG", game.money(float(projection["net"]))))
+	var revenue_tile: PanelContainer = info_tile("INTÄKTER / FLYG", game.money(float(projection["revenue"])))
+	var cost_tile: PanelContainer = info_tile("KOSTNADER / FLYG", game.money(float(projection["cost"])))
+	var net_tile: PanelContainer = info_tile("NETTO / FLYG", game.money(float(projection["net"])))
+	cols.add_child(revenue_tile)
+	cols.add_child(cost_tile)
+	cols.add_child(net_tile)
 	var p: Dictionary = game.catalog_by_id.get(str(r["plane"]), {})
 	sheet_body.add_child(label(str(p.get("name", "Flygplan")), 16, INK, true))
 	sheet_body.add_child(label("%d platser  ·  %d%% beläggning" % [int(projection["seats"]), int(projection["load"])], 12, MUTED))
@@ -995,10 +1012,34 @@ func show_route(id: String) -> void:
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ticket_row.add_child(slider)
 	ticket_row.add_child(fare_value)
+	var live_estimate: Label = label("Prognos: %d/%d platser  ·  %s netto/flyg" % [roundi(float(projection["pax"])), int(projection["seats"]), game.money(float(projection["net"]))], 12, Color("4d817b"))
+	sheet_body.add_child(live_estimate)
+	var best: Dictionary = game.fare_recommendation(id)
+	var strategy_label: Label = label("", 12, MUTED)
+	if not best.is_empty():
+		strategy_label.text = "Marknadsanalys: %s/biljett kan ge %s netto/flyg (%d%% beläggning)." % [game.money(float(best["fare"])), game.money(float(best["net"])), int(best["load"])]
+		sheet_body.add_child(strategy_label)
 	slider.value_changed.connect(func(value: float) -> void:
 		r["fare"] = game.rounded(value)
 		fare_value.text = game.money(float(r["fare"]))
+		var estimate: Dictionary = game.projected(r)
+		if not estimate.is_empty():
+			set_info_tile_value(revenue_tile, game.money(float(estimate["revenue"])))
+			set_info_tile_value(cost_tile, game.money(float(estimate["cost"])))
+			set_info_tile_value(net_tile, game.money(float(estimate["net"])))
+			live_estimate.text = "Prognos: %d/%d platser  ·  %s netto/flyg" % [roundi(float(estimate["pax"])), int(estimate["seats"]), game.money(float(estimate["net"]))]
 		game.save_game()
+		game.changed.emit()
+	)
+	var smart_price: Button = button("ANVÄND FÖRESLAGET BILJETTPRIS", false)
+	smart_price.disabled = best.is_empty() or absf(float(best.get("fare", r["fare"])) - float(r["fare"])) < 0.004
+	sheet_body.add_child(smart_price)
+	smart_price.pressed.connect(func() -> void:
+		if best.is_empty():
+			return
+		slider.value = float(best["fare"])
+		smart_price.disabled = true
+		toast("Biljettpriset är justerat efter den aktuella efterfrågan")
 	)
 	var choose_aircraft: Button = button("BYT FLYGPLAN  ·  VISA ALLA MODELLER")
 	sheet_body.add_child(choose_aircraft)
