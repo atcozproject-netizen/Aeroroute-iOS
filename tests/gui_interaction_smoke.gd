@@ -59,36 +59,64 @@ func _run() -> void:
 			_fail("Route suggestion has nonexistent airport or invalid opening cost")
 			return
 
+	# New game must begin with COUNTRY, then permit any airport as HUB.
+	if view.start_country != "" or view.start_begin_button.visible:
+		_fail("Onboarding must start with country selection, not an arbitrary hub")
+		return
+	if not view.game.can_start_at("ESSP"):
+		_fail("Small regional airports like ESSP must be eligible as home hubs")
+		return
+	var unfeatured_hub: String = ""
+	for airport in view.game.airports:
+		var candidate_icao: String = str(airport["icao"])
+		if not view.game.featured_codes.has(candidate_icao):
+			unfeatured_hub = candidate_icao
+			break
+	if unfeatured_hub.is_empty() or not view.game.can_start_at(unfeatured_hub):
+		_fail("Hubs are still restricted to curated international airports")
+		return
 	var search: LineEdit = view.start_search
 	if search.get_global_rect().size.x < 20.0:
-		_fail("Search box has no usable geometry")
+		_fail("Country search field has no usable geometry")
 		return
 	_click(search.get_global_rect().get_center())
 	await process_frame
 	if not search.has_focus():
-		_fail("Clicking the search field did not focus it")
+		_fail("Country selection search cannot receive focus")
+		return
+	search.text = "UAE"
+	search.text_changed.emit("UAE")
+	await process_frame
+	var options: VBoxContainer = view.start_choices
+	if options.get_child_count() < 1:
+		_fail("United Arab Emirates country search returned no results")
+		return
+	var country_button: Button = options.get_child(0) as Button
+	_click(country_button.get_global_rect().get_center())
+	await process_frame
+	if view.start_country != "UAE" or not view.start_begin_button.visible:
+		_fail("Country selection did not switch to airport stage")
 		return
 	search.text = "OMDB"
 	search.text_changed.emit("OMDB")
 	await process_frame
-	var options: VBoxContainer = view.start_choices
 	if options.get_child_count() < 1:
-		_fail("Searching for OMDB returned no airport")
+		_fail("Airport search failed inside the selected country")
 		return
 	var first: Button = options.get_child(0) as Button
-	if first == null or not first.text.contains("OMDB"):
-		_fail("OMDB airport selection missing after search")
+	if not first.text.contains("OMDB"):
+		_fail("OMDB is not available after selecting UAE")
 		return
 	_click(first.get_global_rect().get_center())
 	await process_frame
-	if view.start_choice_code != "OMDB" or not first.button_pressed or not view.start_selection_label.text.contains("OMDB"):
-		_fail("Selecting OMDB must persist and visually highlight selected airport")
+	if view.start_choice_code != "OMDB" or not first.button_pressed or view.start_begin_button.disabled:
+		_fail("Airport selection did not select a valid HUB")
 		return
 	if view.start_overlay.find_children("*", "ScrollContainer", true, false).size() > 0:
 		_fail("Start modal still contains buggy nested airport scrolling")
 		return
 	if view.start_choices.get_child_count() > 4:
-		_fail("Start modal displays more options than usable on iPhone")
+		_fail("Start modal displays too many airport choices on iPhone")
 		return
 	# Rotate BEFORE starting company: welcome screen must display a true
 	# two-column layout and remain inside the short landscape viewport.
