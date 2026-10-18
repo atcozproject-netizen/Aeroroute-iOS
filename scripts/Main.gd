@@ -51,7 +51,11 @@ var start_welcome: PanelContainer
 var start_layout: GridContainer
 var start_search: LineEdit
 var start_choices: VBoxContainer
-var start_choice_code: String = "ESSA"
+var start_choice_code: String = ""
+var start_country: String = ""
+var start_country_back: Button
+var start_step_label: Label
+var start_intro_label: Label
 var start_selection_label: Label
 var start_begin_button: Button
 var route_origin: String = ""
@@ -323,7 +327,7 @@ func create_scene() -> void:
 	hud.add_child(stats)
 	stats.add_child(build_stat("SALDO", "650 AC", "cash"))
 	stats.add_child(build_stat("LINJER", "0", "routes"))
-	stats.add_child(build_stat("PASSAGERARE", "0", "passengers"))
+	# Passenger counts remain available in the company panel.
 
 	nav_bar = add_styled_panel(Color(0.07, 0.19, 0.24, 0.96), 19)
 	var nav_back: StyleBoxFlat = nav_bar.get_theme_stylebox("panel") as StyleBoxFlat
@@ -389,7 +393,7 @@ func create_scene() -> void:
 		fir_button.text = "AV" if fir_mode == 0 else ("FIR" if fir_mode == 1 else "FIR+")
 		update_map_status()
 	)
-	route_mode_button = button("DRA NY LINJE", true)
+	route_mode_button = button("NY LINJE", true)
 	var route_action_style: StyleBoxFlat = route_mode_button.get_theme_stylebox("normal") as StyleBoxFlat
 	route_action_style.bg_color = Color("e7b574")
 	route_mode_button.add_theme_color_override("font_color", Color("123441"))
@@ -422,13 +426,15 @@ func create_scene() -> void:
 		follow_button.text = "SLUTA FÖLJA" if active else "FÖLJ FLYG"
 	)
 	route_mode_button.toggled.connect(func(active: bool) -> void:
-		route_mode_button.text = "VÄLJ 2 PLATSER" if active else "DRA NY LINJE"
+		route_mode_button.text = "AVBRYT" if active else "NY LINJE"
 		route_mode = active
 		world_map.route_draw_enabled = active
 		route_origin = ""
 		world_map.route_origin = ""
 		world_map.reset_gesture()
 		update_map_status()
+		if active:
+			toast("Välj start och mål på kartan")
 	)
 	# FIR is enabled after the HUD and notification labels have been created.
 
@@ -555,7 +561,8 @@ func create_scene() -> void:
 	map_status.offset_bottom = -208.0
 	map_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(map_status)
-	fir_layer.set_mode(1)
+	fir_layer.set_mode(0)
+	fir_mode = 0
 	update_map_status()
 	_refresh_layout()
 
@@ -802,7 +809,7 @@ func update_map_status() -> void:
 		map_status.text = "KARTA • FLYTTA MED FINGRET"
 	# The top HUD communicates FIR state through its button; the map status
 	# is reserved for purposeful route building, never persistent cartographic text.
-	map_status.visible = active_tab == "map" and game.initialized and route_mode
+	map_status.visible = false
 
 func _airport_tapped(code: String) -> void:
 	if not game.initialized:
@@ -855,7 +862,7 @@ func _draft_route(from: String, to: String) -> void:
 	route_mode = false
 	if route_mode_button != null:
 		route_mode_button.set_pressed_no_signal(false)
-		route_mode_button.text = "DRA NY LINJE"
+		route_mode_button.text = "NY LINJE"
 	route_origin = ""
 	world_map.route_origin = ""
 	world_map.queue_redraw()
@@ -1133,10 +1140,11 @@ func show_tab(tab: String) -> void:
 	content_view.visible = tab != "map"
 	# The living flight map remains active behind partial operations panels.
 	flight_layer.visible = true
-	get_node("ClockDock").visible = tab == "map"
-	zoom_buttons.visible = tab == "map"
+	# Hide the redundant clock dock from the main map.
+	get_node("ClockDock").visible = false
+	zoom_buttons.visible = false
 	route_mode_button.visible = tab == "map"
-	follow_button.visible = tab == "map"
+	follow_button.visible = false
 	if tab == "map":
 		follow_button.disabled = game.routes.is_empty()
 	if tab != "map":
@@ -1148,7 +1156,7 @@ func show_tab(tab: String) -> void:
 		world_map.route_origin = ""
 		if route_mode_button != null:
 			route_mode_button.set_pressed_no_signal(false)
-			route_mode_button.text = "DRA NY LINJE"
+			route_mode_button.text = "NY LINJE"
 	update_map_status()
 	for key in tab_buttons:
 		var nav_button: Button = tab_buttons[key]
@@ -1236,7 +1244,20 @@ func build_tab() -> void:
 				dialog.canceled.connect(func() -> void: dialog.queue_free())
 				dialog.popup_centered()
 			)
-			content_body.add_child(label("LEDNINGSBESLUT", 12, MUTED, true))
+			content_body.add_child(label("SPEL & INSTÄLLNINGAR", 12, MUTED, true))
+		var pause_setting: Button = button("FORTSÄTT" if game.paused else "PAUSA SPELET", false)
+		content_body.add_child(pause_setting)
+		pause_setting.pressed.connect(func() -> void:
+			_toggle_pause()
+			build_tab()
+		)
+		var speed_setting: Button = button("HASTIGHET %dx" % roundi(game.speed), false)
+		content_body.add_child(speed_setting)
+		speed_setting.pressed.connect(func() -> void:
+			game.speed = 1.0 if game.speed > 1.0 else 2.0
+			game.save_game()
+			build_tab()
+		)
 			for kind in ["marketing", "service", "staffing"]:
 				var title: String = {"marketing":"Marknadsföring", "service":"Service", "staffing":"Personal"}[kind]
 				var line: HBoxContainer = row()
@@ -1269,12 +1290,13 @@ func refresh_hud() -> void:
 		follow_button.disabled = int(ops["routes"]) == 0
 	if brand_status != null:
 		if int(ops["routes"]) > 0:
-			brand_status.text = "%s  ·  %d S" % [str(ops["next_airport"]), int(ops["next_seconds"])]
+			brand_status.text = "HUB  %s" % game.home
 		else:
-			brand_status.text = "BYGG DITT FLYGNÄT"
+			brand_status.text = "HUB  %s" % game.home
 	hud_balance.text = game.money(game.cash)
 	hud_routes.text = str(game.routes.size())
-	hud_passengers.text = str(game.total_passengers)
+	if hud_passengers != null:
+		hud_passengers.text = str(game.total_passengers)
 	clock_label.text = "NÄSTA %s · %d S" % [str(ops["next_airport"]), int(ops["next_seconds"])] if int(ops["routes"]) > 0 else "BYGG FÖRSTA LINJEN"
 	play_button.text = "SPELA" if game.paused else "PAUS"
 	if current_sheet == "route" and flight_eta != null:
