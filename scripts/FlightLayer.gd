@@ -92,7 +92,7 @@ func draw_airplane(pos: Vector2, heading: Vector2, route: Dictionary) -> void:
 	var model: Dictionary = game.catalog_by_id.get(str(route.get("plane", "")), {})
 	var is_prop: bool = int(model.get("level", 1)) <= 2
 	var angle: float = heading.angle()
-	var size_factor: float = 0.79 if is_prop else 0.83
+	var size_factor: float = 1.19 if is_prop else 1.24
 	var geometry: PackedVector2Array
 	if is_prop:
 		geometry = PackedVector2Array([
@@ -116,20 +116,20 @@ func draw_airplane(pos: Vector2, heading: Vector2, route: Dictionary) -> void:
 		fill.append(pos + pt.rotated(angle) * size_factor)
 		outer.append(pos + pt.rotated(angle) * (size_factor + 0.065))
 	# Aviation-style halo, subtly scaled so it stays crisp when zooming.
-	draw_circle(pos, 14.0 if not is_prop else 12.0, Color(1.0, 0.96, 0.78, 0.08))
+	draw_circle(pos, 20.0 if not is_prop else 18.0, Color(1.0, 0.96, 0.78, 0.13))
 	draw_colored_polygon(outer, Color(1.0, 0.99, 0.93, 0.96))
 	draw_colored_polygon(fill, Color("244e5c"))
 	var wing_extent: float = 10.4 if is_prop else 10.3
 	var wing_left: Vector2 = pos + Vector2(-1.0, -wing_extent).rotated(angle) * size_factor
 	var wing_right: Vector2 = pos + Vector2(-1.0, wing_extent).rotated(angle) * size_factor
-	draw_circle(wing_left, 1.35, Color("ec8878"))
-	draw_circle(wing_right, 1.35, Color("8dd2b4"))
+	draw_circle(wing_left, 1.9, Color("ec8878"))
+	draw_circle(wing_right, 1.9, Color("8dd2b4"))
 	if is_prop:
 		# Rotating two-blade propeller is visible up close but uses no sprites.
-		var tip: Vector2 = pos + heading * 9.3
+		var tip: Vector2 = pos + heading * (9.3 * size_factor)
 		var prop_axis: Vector2 = Vector2(-sin(angle), cos(angle))
 		var speed_wobble: float = sin(ambient_time * 32.0)
 		draw_line(tip + prop_axis * (2.0 + speed_wobble), tip - prop_axis * (2.0 + speed_wobble), Color(1.0, 1.0, 1.0, 0.72), 1.2, true)
 	else:
-		var aft: Vector2 = pos - heading * 9.0
+		var aft: Vector2 = pos - heading * (9.0 * size_factor)
 		draw_circle(aft, 1.6, Color(1.0, 0.78, 0.52, 0.72))
