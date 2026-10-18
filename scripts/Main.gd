@@ -1086,6 +1086,12 @@ func show_route(id: String) -> void:
 	var choose_aircraft: Button = button("BYT FLYGPLAN")
 	sheet_body.add_child(choose_aircraft)
 	choose_aircraft.pressed.connect(func() -> void: show_plane_picker(id))
+	var follow_aircraft: Button = button("FÖLJ FLYG", false)
+	sheet_body.add_child(follow_aircraft)
+	follow_aircraft.pressed.connect(func() -> void:
+		show_tab("map")
+		world_map.toggle_follow(id)
+	)
 func show_search() -> void:
 	if not game.initialized:
 		return
@@ -1237,8 +1243,19 @@ func build_tab() -> void:
 				dialog.dialog_text = "Den nuvarande sparfilen skrivs över. Vill du starta om?"
 				add_child(dialog)
 				dialog.confirmed.connect(func() -> void:
-					game.begin(game.home)
-					show_tab("map")
+					# Preserve the old save until the player actually chooses a new
+					# country and HUB. The new begin() overwrites it then.
+					game.initialized = false
+					route_mode = false
+					route_origin = ""
+					world_map.route_draw_enabled = false
+					world_map.route_origin = ""
+					world_map.reset_gesture()
+					route_mode_button.set_pressed_no_signal(false)
+					route_mode_button.text = "NY LINJE"
+					close_sheet()
+					content_view.visible = false
+					show_start()
 					dialog.queue_free()
 				)
 				dialog.canceled.connect(func() -> void: dialog.queue_free())
