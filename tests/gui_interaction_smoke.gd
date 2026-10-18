@@ -758,5 +758,50 @@ func _run() -> void:
 	if not view.game.owned.has("WMKK"):
 		_fail("Purchased airport not recorded as an owned market")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: consistent route prices, precise quotes and physical portrait/landscape resize")
+	# The player can compare demand, margins and aircraft options without
+	# spending cash or silently changing a route during market analysis.
+	var managed_id: String = view.game.route_key("WSSS", "WMKK")
+	var managed_route: Dictionary = view.game.get_route(managed_id)
+	var base_fare: float = float(managed_route["fare"])
+	var base_cash: float = view.game.cash
+	var base_forecast: Dictionary = view.game.projected(managed_route)
+	var advice: Dictionary = view.game.fare_recommendation(managed_id)
+	if advice.is_empty() or float(advice.get("fare", 0.0)) < 0.55 or float(advice.get("gain", -1.0)) < -0.001:
+		_fail("Fare advisor failed to return a legal, non-worse modeled offer")
+		return
+	if float(advice["net"]) + 0.01 < float(base_forecast["net"]) or float(managed_route["fare"]) != base_fare or view.game.cash != base_cash:
+		_fail("Fare advisor changed live economy or worsened flight forecast")
+		return
+	if not view.game.fare_recommendation("NO-ROUTE").is_empty():
+		_fail("Fare advisor accepted an unknown route")
+		return
+	view.show_route(managed_id)
+	var fare_sliders: Array[Node] = view.sheet.find_children("*", "HSlider", true, false)
+	if fare_sliders.is_empty():
+		_fail("Route sheet does not expose playable ticket price control")
+		return
+	var fare_slider: HSlider = fare_sliders[0] as HSlider
+	fare_slider.value = minf(fare_slider.max_value, fare_slider.value + 0.5)
+	if absf(float(managed_route["fare"]) - view.game.rounded(fare_slider.value)) > 0.001:
+		_fail("Ticket price slider did not update the route")
+		return
+	var adjusted: Dictionary = view.game.projected(managed_route)
+	var forecast_seen: bool = false
+	for entry in view.sheet.find_children("*", "Label", true, false):
+		var msg: String = str((entry as Label).text)
+		if msg.contains("Prognos:") and msg.contains(view.game.money(float(adjusted["net"]))):
+			forecast_seen = true
+	if not forecast_seen:
+		_fail("Ticket slider did not refresh live profit forecast on the visible screen")
+		return
+	view.show_plane_picker(managed_id)
+	var profit_comparison_found: bool = false
+	for entry in view.sheet.find_children("*", "Button", true, false):
+		if (entry as Button).text.contains("Prognos") and (entry as Button).text.contains("beläggning"):
+			profit_comparison_found = true
+			break
+	if not profit_comparison_found:
+		_fail("Aircraft picker does not compare real profit and passenger load")
+		return
+	print("AEROROUTE GUI SMOKE PASSED: live fares and aircraft profitability, consistent prices and physical portrait/landscape resize")
 	quit(0)
