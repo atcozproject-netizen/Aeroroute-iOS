@@ -83,13 +83,9 @@ func is_featured(icao: String) -> bool:
 	return featured_codes.has(icao) or owned.has(icao) or icao == home and initialized
 
 func can_start_at(icao: String) -> bool:
-	if not airports_by_code.has(icao) or not featured_codes.has(icao):
-		return false
-	for other in airports:
-		var code: String = str(other["icao"])
-		if featured_codes.has(code) and code != icao and kilometers(icao, code) <= 1100.0:
-			return true
-	return false
+	# A player may establish their home hub at ANY airport present in the
+	# installed database, not just the curated high-traffic map subset.
+	return airports_by_code.has(icao)
 
 func begin(icao: String) -> void:
 	if not can_start_at(icao):
@@ -331,9 +327,6 @@ func route_quote(a_code: String, b_code: String) -> Dictionary:
 		return quote
 	if not airports_by_code.has(a_code) or not airports_by_code.has(b_code):
 		quote["reason"] = "Okänd flygplats"
-		return quote
-	if not is_featured(a_code) or not is_featured(b_code):
-		quote["reason"] = "Flygplatsen ingår inte i det aktuella nätverket"
 		return quote
 	if not get_route(route_key(a_code, b_code)).is_empty():
 		quote["reason"] = "Linjen finns redan"
