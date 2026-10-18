@@ -902,7 +902,7 @@ func show_airport(code: String) -> void:
 	else:
 		sheet_body.add_child(label("Inga anslutna linjer ännu.", 13, MUTED))
 	if connected.is_empty():
-		sheet_body.add_child(label("Håll på flygplatsen och dra till nästa flygplats på kartan.", 12, MUTED))
+		sheet_body.add_child(label("Välj NY LINJE för att ansluta flygplatsen.", 12, MUTED))
 
 
 func show_plane_picker(route_id: String, show_all: bool = false) -> void:
@@ -1093,8 +1093,6 @@ func _search_updated(query: String) -> void:
 	clear_children(search_results)
 	var matches: Array = []
 	for a in game.airports:
-		if not game.is_featured(str(a["icao"])):
-			continue
 		var field: String = "%s %s %s %s" % [a["icao"], a["iata"], a["name"], a["country"]]
 		if query.strip_edges() == "" or field.to_lower().contains(query.to_lower()):
 			matches.append(a)
@@ -1168,7 +1166,7 @@ func build_tab() -> void:
 		"routes":
 			content_body.add_child(label("MINA LINJER", 24, INK, true))
 			if game.routes.is_empty():
-				content_body.add_child(label("Dra mellan två flygplatser för att öppna en linje.", 14, MUTED))
+				content_body.add_child(label("Tryck NY LINJE på kartan för att öppna din första linje.", 14, MUTED))
 			for r in game.routes:
 				var id: String = str(r["id"])
 				var projected: Dictionary = game.projected(r)
