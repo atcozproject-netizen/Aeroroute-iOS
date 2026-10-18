@@ -66,8 +66,11 @@ var search_line: LineEdit
 var search_results: VBoxContainer
 var zoom_buttons: GridContainer
 var follow_button: Button
+var dismiss_touch_active: bool = false
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch and not event.pressed:
+		dismiss_touch_active = false
 	if start_overlay != null and is_instance_valid(start_overlay) and start_overlay.visible:
 		return
 	var pressed: bool = false
@@ -91,9 +94,11 @@ func _input(event: InputEvent) -> void:
 	if nav_bar != null and nav_bar.get_global_rect().has_point(at):
 		return
 	if sheet != null and sheet.visible and not sheet.get_global_rect().has_point(at):
+		dismiss_touch_active = event is InputEventScreenTouch
 		close_sheet()
 		get_viewport().set_input_as_handled()
 	elif content_view != null and content_view.visible and active_tab != "map" and not content_view.get_global_rect().has_point(at):
+		dismiss_touch_active = event is InputEventScreenTouch
 		show_tab("map")
 		get_viewport().set_input_as_handled()
 
@@ -398,7 +403,7 @@ func create_scene() -> void:
 	route_mode_button.offset_right = 134.0
 	route_mode_button.custom_minimum_size = Vector2(121.0, 49.0)
 	add_child(route_mode_button)
-	follow_button = button("✈ FÖLJ FLYG", false)
+	follow_button = button("FÖLJ FLYG", false)
 	follow_button.anchor_top = 1.0
 	follow_button.anchor_bottom = 1.0
 	follow_button.offset_top = -202.0
@@ -414,10 +419,10 @@ func create_scene() -> void:
 		if world_map.follow_route_id != "" and next_id != world_map.follow_route_id:
 			next_id = world_map.follow_route_id
 		var active: bool = world_map.toggle_follow(next_id)
-		follow_button.text = "✕ SLUTA FÖLJA" if active else "✈ FÖLJ FLYG"
+		follow_button.text = "SLUTA FÖLJA" if active else "FÖLJ FLYG"
 	)
 	route_mode_button.toggled.connect(func(active: bool) -> void:
-		route_mode_button.text = "✓ VÄLJ 2 PLATSER" if active else "DRA NY LINJE"
+		route_mode_button.text = "VÄLJ 2 PLATSER" if active else "DRA NY LINJE"
 		route_mode = active
 		world_map.route_draw_enabled = active
 		route_origin = ""
@@ -714,7 +719,7 @@ func _layout_for_size(view_size: Vector2) -> void:
 			content_view.offset_bottom = -76.0
 
 func map_gesture_active() -> bool:
-	return active_tab == "map" and game.initialized and not (
+	return active_tab == "map" and game.initialized and not dismiss_touch_active and not (
 		(start_overlay != null and is_instance_valid(start_overlay) and start_overlay.visible)
 		or shade.visible or sheet.visible
 	)
@@ -880,7 +885,7 @@ func show_airport(code: String) -> void:
 		var capacity: int = 2 + terminal_level * 2
 		sheet_body.add_child(label("%d/%d flyglinjer anslutna  ·  Terminal %d" % [connected.size(), capacity, terminal_level], 13, MUTED))
 		var upgrade_cost: float = game.terminal_upgrade_price(code)
-		var upgrade_text: String = "✓ MAXIMAL KAPACITET" if upgrade_cost < 0.0 else "⬆ UPPGRADERA FLYGPLATS  ·  %s" % game.money(upgrade_cost)
+		var upgrade_text: String = "MAXIMAL KAPACITET" if upgrade_cost < 0.0 else "UPPGRADERA FLYGPLATS  ·  %s" % game.money(upgrade_cost)
 		var upgrade: Button = button(upgrade_text, true)
 		upgrade.disabled = upgrade_cost < 0.0 or game.cash < upgrade_cost
 		sheet_body.add_child(upgrade)
@@ -955,6 +960,8 @@ func show_plane_picker(route_id: String, show_all: bool = false) -> void:
 			str(model["name"]), int(model["seats"]),
 			("DU FÅR " + game.money(-price)) if price < 0.0 else game.money(price) if affordable_now else ("SPARA " + game.money(price - game.cash))]
 		var action: Button = button(description, false)
+		# Allow vertical swipe gestures to reach the surrounding scroll panel.
+		action.mouse_filter = Control.MOUSE_FILTER_PASS
 		action.custom_minimum_size.y = 60.0
 		action.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		action.disabled = not affordable_now
@@ -1144,7 +1151,7 @@ func show_tab(tab: String) -> void:
 	if tab != "map":
 		world_map.route_draw_enabled = false
 		world_map.toggle_follow("")
-		follow_button.text = "✈ FÖLJ FLYG"
+		follow_button.text = "FÖLJ FLYG"
 		route_mode = false
 		route_origin = ""
 		world_map.route_origin = ""
@@ -1304,7 +1311,7 @@ func refresh_hud() -> void:
 		follow_button.disabled = int(ops["routes"]) == 0
 	if brand_status != null:
 		if int(ops["routes"]) > 0:
-			brand_status.text = "✈ %s  ·  %d S" % [str(ops["next_airport"]), int(ops["next_seconds"])]
+			brand_status.text = "%s  ·  %d S" % [str(ops["next_airport"]), int(ops["next_seconds"])]
 		else:
 			brand_status.text = "BYGG DITT FLYGNÄT"
 	hud_balance.text = game.money(game.cash)
@@ -1485,7 +1492,7 @@ func _update_start_selected_visual() -> void:
 		if name_short.length() > 29:
 			name_short = name_short.substr(0, 28).strip_edges() + "…"
 		var selected: bool = code == start_choice_code
-		airport_button.text = ("✓  " if selected else "     ") + code + " · " + name_short
+		airport_button.text = ("VALD  " if selected else "     ") + code + " · " + name_short
 		airport_button.set_pressed_no_signal(selected)
 		airport_button.add_theme_color_override("font_color", Color("fffdf6") if selected else DARK)
 		var background: StyleBoxFlat = StyleBoxFlat.new()
