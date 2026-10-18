@@ -90,6 +90,26 @@ func _run() -> void:
 	if view.start_choices.get_child_count() > 4:
 		_fail("Start modal displays more options than usable on iPhone")
 		return
+	# Rotate BEFORE starting company: welcome screen must display a true
+	# two-column layout and remain inside the short landscape viewport.
+	root.size = Vector2i(844,390)
+	await process_frame
+	await process_frame
+	view._refresh_layout()
+	if view.start_layout.columns != 2 or view.viewport_layout_mode != "landscape":
+		_fail("Startup screen did not reflow into two landscape columns")
+		return
+	var start_rect: Rect2 = view.start_welcome.get_global_rect()
+	if start_rect.position.y < -2.0 or start_rect.end.y > view.size.y + 2.0:
+		_fail("Landscape welcome screen clipped vertically")
+		return
+	root.size = Vector2i(390,844)
+	await process_frame
+	await process_frame
+	view._refresh_layout()
+	if view.start_layout.columns != 1 or view.viewport_layout_mode != "portrait":
+		_fail("Startup failed to return to single column in portrait")
+		return
 	var begin_button: Button = null
 	for candidate in view.start_overlay.find_children("*", "Button", true, false):
 		if candidate is Button and candidate.text.begins_with("STARTA FLYGBOLAG"):
@@ -584,8 +604,8 @@ func _run() -> void:
 	if not view.quote_label.text.contains("Plan ") or not view.quote_label.text.contains("flygplats ") or not view.quote_label.text.contains("linje "):
 		_fail("Route quote does not explain aircraft, airport and distance costs")
 		return
-	if not view.quote_label.text.contains("KVAR EFTER KÖP"):
-		_fail("Route quote is missing remaining balance after purchase")
+	if not view.quote_label.text.contains("KVAR:") or not view.quote_label.text.contains("PROGNOS"):
+		_fail("Route quote must show remaining balance and estimated flight profit")
 		return
 	view.game.cash = 0.0
 	var poor_quote: Dictionary = view.game.route_quote("ESSA", "ESMS")
@@ -666,6 +686,9 @@ func _run() -> void:
 	var quote_first: Dictionary = view.game.route_quote("WSSS","WMKK")
 	if not bool(quote_first["ok"]):
 		_fail("Starter cash does not allow a reasonable Singapore-KL route")
+		return
+	if not quote_first.has("estimated_net") or not quote_first.has("estimated_pax"):
+		_fail("Route quote must explain expected profit and passenger demand")
 		return
 	var breakdown: Dictionary = view.game.route_cost_breakdown("WSSS","WMKK")
 	var calculated: float = float(breakdown["aircraft"])+float(breakdown["airport"])+float(breakdown["route"])
