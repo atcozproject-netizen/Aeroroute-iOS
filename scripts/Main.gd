@@ -1450,7 +1450,7 @@ func _update_start_selected_visual() -> void:
 		if name_short.length() > 29:
 			name_short = name_short.substr(0, 28).strip_edges() + "…"
 		var selected: bool = code == start_choice_code
-		airport_button.text = ("VALD  " if selected else "     ") + code + " · " + name_short
+		airport_button.text = (">  " if selected else "   ") + code + " · " + name_short
 		airport_button.set_pressed_no_signal(selected)
 		airport_button.add_theme_color_override("font_color", Color("fffdf6") if selected else DARK)
 		var background: StyleBoxFlat = StyleBoxFlat.new()
