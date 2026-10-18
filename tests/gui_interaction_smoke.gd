@@ -556,15 +556,16 @@ func _run() -> void:
 	view.show_tab("map")
 	view.world_map.camera_lon = 16.3
 	view.world_map.camera_lat = 59.1
-	view.world_map.zoom = 26.0
+	view.world_map.zoom = 36.0
 	await process_frame
 	var arc: PackedVector2Array = view.world_map.route_points("ESSA", "ESSP")
-	var hit: Vector2 = arc[12]
-	if view.world_map.nearest_route(hit, 4.0) != route_id:
-		_fail("Geometric tap hit test failed for flight route")
-		return
-	if view.world_map.nearest_airport(hit, 17.0) != "":
-		_fail("Line test hits airport, unable to verify priority")
+	var hit: Vector2 = Vector2(-1.0, -1.0)
+	for possible in arc:
+		if view.world_map.nearest_route(possible, 4.0) == route_id and view.world_map.nearest_airport(possible, 17.0) == "":
+			hit = possible
+			break
+	if hit.x < 0.0:
+		_fail("Route line offers no visible tap area away from airport markers")
 		return
 	view.world_map.handle_press(hit)
 	view.world_map.handle_release(hit)
@@ -671,6 +672,9 @@ func _run() -> void:
 		return
 	if view.route_mode_button.get_global_rect().intersects(view.nav_bar.get_global_rect()) or view.follow_button.get_global_rect().intersects(view.nav_bar.get_global_rect()):
 		_fail("Landscape route actions overlap navigation")
+		return
+	if view.sheet.get_global_rect().intersects(view.nav_bar.get_global_rect()):
+		_fail("Landscape route information panel overlaps the bottom navigation")
 		return
 	root.size = Vector2i(390, 844)
 	await process_frame

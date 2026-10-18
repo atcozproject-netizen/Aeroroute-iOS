@@ -570,7 +570,7 @@ func _layout_for_size(view_size: Vector2) -> void:
 	nav_bar.anchor_left = 0.0
 	nav_bar.anchor_right = 0.0 if landscape else 1.0
 	nav_bar.offset_left = 8.0 if landscape else 10.0
-	nav_bar.offset_right = minf(view_size.x * 0.62, 494.0) if landscape else -10.0
+	nav_bar.offset_right = minf(view_size.x * 0.46, 410.0) if landscape else -10.0
 	nav_bar.offset_top = -64.0 if landscape else -68.0
 	nav_bar.offset_bottom = -8.0
 	if landscape:
@@ -607,6 +607,8 @@ func _layout_for_size(view_size: Vector2) -> void:
 		quote_card.offset_bottom = 229.0 if landscape else -218.0
 		quote_card.offset_left = -182.0 if landscape else -169.0
 		quote_card.offset_right = 182.0 if landscape else 169.0
+	if shade != null:
+		shade.color = Color(0.12, 0.27, 0.32, 0.18 if landscape else 0.36)
 	if sheet != null:
 		if landscape:
 			sheet.anchor_left = 1.0
