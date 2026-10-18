@@ -67,6 +67,36 @@ var search_results: VBoxContainer
 var zoom_buttons: GridContainer
 var follow_button: Button
 
+func _input(event: InputEvent) -> void:
+	if start_overlay != null and is_instance_valid(start_overlay) and start_overlay.visible:
+		return
+	var pressed: bool = false
+	var at: Vector2 = Vector2.ZERO
+	if event is InputEventScreenTouch and event.pressed:
+		pressed = true
+		at = event.position
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		pressed = true
+		at = event.position
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		if current_sheet != "":
+			close_sheet()
+			get_viewport().set_input_as_handled()
+		elif active_tab != "map":
+			show_tab("map")
+			get_viewport().set_input_as_handled()
+		return
+	if not pressed:
+		return
+	if nav_bar != null and nav_bar.get_global_rect().has_point(at):
+		return
+	if sheet != null and sheet.visible and not sheet.get_global_rect().has_point(at):
+		close_sheet()
+		get_viewport().set_input_as_handled()
+	elif content_view != null and content_view.visible and active_tab != "map" and not content_view.get_global_rect().has_point(at):
+		show_tab("map")
+		get_viewport().set_input_as_handled()
+
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	create_scene()
@@ -116,6 +146,9 @@ func button(text: String, filled: bool = true) -> Button:
 	b.add_theme_font_size_override("font_size", 13)
 	b.add_theme_color_override("font_color", PAPER if filled else DARK)
 	b.add_theme_color_override("font_hover_color", PAPER if filled else DARK)
+	# Disabled options must remain legible over light panels on iPhone.
+	b.add_theme_color_override("font_disabled_color", Color("345460"))
+	b.add_theme_color_override("font_focus_color", PAPER if filled else DARK)
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = DARK if filled else Color("e7f0eb")
 	normal.shadow_size = 2
@@ -451,15 +484,15 @@ func create_scene() -> void:
 	scroll.add_child(content_body)
 
 	shade = ColorRect.new()
-	shade.color = Color(0.12, 0.27, 0.32, 0.49)
+	shade.color = Color(0.12, 0.27, 0.32, 0.14)
 	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	shade.visible = false
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(shade)
 	shade.gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventMouseButton and event.pressed:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			close_sheet()
-		if event is InputEventScreenTouch and not event.pressed:
+		elif event is InputEventScreenTouch and event.pressed:
 			close_sheet()
 	)
 
@@ -475,6 +508,7 @@ func create_scene() -> void:
 	sheet_scroll = ScrollContainer.new()
 	sheet_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sheet_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sheet_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	sheet.add_child(sheet_scroll)
 	sheet_body = stack(11)
 	sheet_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -489,8 +523,8 @@ func create_scene() -> void:
 	quote_card.anchor_bottom = 1.0
 	quote_card.offset_left = -169.0
 	quote_card.offset_right = 169.0
-	quote_card.offset_top = -332.0
-	quote_card.offset_bottom = -218.0
+	quote_card.offset_top = -270.0
+	quote_card.offset_bottom = -205.0
 	quote_card.visible = false
 	add_child(quote_card)
 	quote_label = label("", 11, Color("fff6e6"), true)
@@ -520,42 +554,30 @@ func create_scene() -> void:
 	update_map_status()
 	_refresh_layout()
 
+
 func _update_route_quote(quote: Dictionary) -> void:
 	if quote_card == null:
 		return
 	if quote.is_empty() or not game.initialized or current_sheet != "" or active_tab != "map":
 		quote_card.visible = false
 		return
-	quote_card.visible = true
 	var destination: String = str(quote.get("to", ""))
 	var price: float = float(quote.get("price", -1.0))
-	var is_ok: bool = bool(quote.get("ok", false))
+	var can_buy: bool = bool(quote.get("ok", false))
 	var reason: String = str(quote.get("reason", ""))
 	var style: StyleBoxFlat = quote_card.get_theme_stylebox("panel") as StyleBoxFlat
-	style.bg_color = Color("1b6559") if is_ok else Color("713f49") if destination != "" else Color("204959")
+	style.bg_color = Color("244e54") if can_buy else Color("714852") if destination != "" else Color("244e54")
+	quote_card.visible = true
 	if destination == "":
-		quote_label.text = "DRA TILL FLYGPLATS" if viewport_layout_mode == "landscape" else "DRA TILL EN FLYGPLATS\nPriset visas när fingret når markören"
+		quote_label.text = "VÄLJ DESTINATION"
 	elif price < 0.0:
-		quote_label.text = "%s → %s · EJ MÖJLIG\n%s" % [quote["from"], destination, reason]
+		quote_label.text = "%s → %s\n%s" % [str(quote.get("from", "")), destination, reason]
+	elif not can_buy:
+		quote_label.text = "%s → %s  ·  %s\n%s" % [str(quote.get("from", "")), destination, game.money(price), reason]
 	else:
-		var amount_aircraft: float = float(quote.get("aircraft", 0.0))
-		var amount_airport: float = float(quote.get("airport_fee", 0.0))
-		var amount_route: float = float(quote.get("route_fee", 0.0))
-		var detail: String = "Plan %s + flygplats %s + linje %s" % [game.money(amount_aircraft), game.money(amount_airport), game.money(amount_route)]
-		var estimated_net: float = float(quote.get("estimated_net", 0.0))
-		var pax: int = roundi(float(quote.get("estimated_pax", 0.0)))
-		var seats: int = int(quote.get("available_seats", 0))
-		var forecast_text: String = "PROGNOS %s/flyg  ·  %d/%d passagerare" % [game.money(estimated_net), pax, seats]
-		if viewport_layout_mode == "landscape":
-			var status: String = "KVAR %s" % game.money(float(quote["remaining"])) if is_ok else reason
-			quote_label.text = "%s → %s · %s  ·  %s/flyg\nPlan %s · flygplats %s · linje %s · %s" % [
-				quote["from"], destination, game.money(price), game.money(estimated_net),
-				game.money(amount_aircraft), game.money(amount_airport), game.money(amount_route), status]
-		elif is_ok:
-			quote_label.text = "%s → %s    TOTALT %s\n%s\n✓ KVAR: %s\n%s" % [quote["from"], destination, game.money(price), detail, game.money(float(quote["remaining"])), forecast_text]
-		else:
-			quote_label.text = "%s → %s    TOTALT %s\n%s\n%s\n%s" % [quote["from"], destination, game.money(price), detail, reason, forecast_text]
-
+		var net: float = float(quote.get("estimated_net", 0.0))
+		quote_label.text = "%s → %s  ·  %s\n%s%s / flyg" % [str(quote.get("from", "")), destination,
+			game.money(price), "+" if net > 0.0 else "", game.money(net)]
 func _refresh_layout() -> void:
 	_layout_for_size(size)
 
@@ -617,12 +639,12 @@ func _layout_for_size(view_size: Vector2) -> void:
 		quote_card.anchor_right = 1.0 if landscape else 0.5
 		quote_card.anchor_top = 0.0 if landscape else 1.0
 		quote_card.anchor_bottom = 0.0 if landscape else 1.0
-		quote_card.offset_top = 142.0 if landscape else -332.0
-		quote_card.offset_bottom = 207.0 if landscape else -218.0
+		quote_card.offset_top = 142.0 if landscape else -270.0
+		quote_card.offset_bottom = 207.0 if landscape else -205.0
 		quote_card.offset_left = -minf(420.0, view_size.x * 0.63) if landscape else -169.0
 		quote_card.offset_right = -8.0 if landscape else 169.0
 	if shade != null:
-		shade.color = Color(0.12, 0.27, 0.32, 0.18 if landscape else 0.36)
+		shade.color = Color(0.12, 0.27, 0.32, 0.08 if landscape else 0.14)
 	if sheet != null:
 		if landscape:
 			sheet.anchor_left = 1.0
@@ -640,7 +662,7 @@ func _layout_for_size(view_size: Vector2) -> void:
 			sheet.anchor_bottom = 1.0
 			sheet.offset_left = 0.0
 			sheet.offset_right = 0.0
-			sheet.offset_top = -minf(555.0, view_size.y * 0.73)
+			sheet.offset_top = -minf(430.0, view_size.y * 0.59)
 			sheet.offset_bottom = -62.0
 	if start_layout != null and is_instance_valid(start_layout) and start_welcome != null and is_instance_valid(start_welcome):
 		var very_short: bool = landscape and view_size.y < 365.0
@@ -688,7 +710,7 @@ func _layout_for_size(view_size: Vector2) -> void:
 			content_view.anchor_bottom = 1.0
 			content_view.offset_left = 9.0
 			content_view.offset_right = -9.0
-			content_view.offset_top = -minf(view_size.y * 0.61, 550.0)
+			content_view.offset_top = -minf(view_size.y * 0.47, 440.0)
 			content_view.offset_bottom = -76.0
 
 func map_gesture_active() -> bool:
@@ -889,7 +911,8 @@ func show_airport(code: String) -> void:
 	if connected.is_empty():
 		sheet_body.add_child(label("Håll på flygplatsen och dra till nästa flygplats på kartan.", 12, MUTED))
 
-func show_plane_picker(route_id: String) -> void:
+
+func show_plane_picker(route_id: String, show_all: bool = false) -> void:
 	var route: Dictionary = game.get_route(route_id)
 	if route.is_empty():
 		close_sheet()
@@ -898,48 +921,59 @@ func show_plane_picker(route_id: String) -> void:
 	world_map.focused_route_id = route_id
 	world_map.queue_redraw()
 	open_sheet("aircraft")
-	heading("FLYGPLAN PÅ LINJEN", str(route["from"]) + " ↔ " + str(route["to"]), game.distance_label(str(route["from"]), str(route["to"])))
+	heading("FLYGPLAN", str(route["from"]) + " ↔ " + str(route["to"]))
 	var current: Dictionary = game.catalog_by_id.get(str(route["plane"]), {})
-	var current_name: String = str(current.get("name", "Flygplan"))
-	sheet_body.add_child(label("NUVARANDE  ·  " + current_name, 15, INK, true))
-	var projected: Dictionary = game.projected(route)
-	if not projected.is_empty():
-		sheet_body.add_child(label("%d platser  ·  %d%% beläggning  ·  %s netto/flyg" % [int(projected["seats"]), int(projected["load"]), game.money(float(projected["net"]))], 12, MUTED))
-	sheet_body.add_child(line_break())
-	sheet_body.add_child(label("VÄLJ FLYGPLAN", 12, MUTED, true))
-	var km: float = game.kilometers(str(route["from"]), str(route["to"]))
+	sheet_body.add_child(label(str(current.get("name", "Flygplan")), 19, INK, true))
+	var forecast: Dictionary = game.projected(route)
+	if not forecast.is_empty():
+		sheet_body.add_child(label("%d platser  ·  %s / flyg" % [int(forecast["seats"]), game.money(float(forecast["net"]))], 12, MUTED))
+	var distance: float = game.kilometers(str(route["from"]), str(route["to"]))
+	var candidates: Array = []
 	for model in game.catalog:
-		var id: String = str(model["id"])
-		var existing: bool = id == str(route["plane"])
-		var valid_range: bool = float(model["range"]) >= km
-		var price: float = game.plane_change_price(route_id, id)
-		var affordable: bool = price <= game.cash
-		var money_label: String = "ANVÄNDS" if existing else "FÖR KORT RÄCKVIDD" if not valid_range else ("FÅ " + game.money(-price)) if price < 0.0 else ("BETALA " + game.money(price))
-		var text_value: String = "%s  ·  %d säten  ·  %s" % [str(model["name"]), int(model["seats"]), money_label]
-		if valid_range:
-			var simulation: Dictionary = route.duplicate(true)
-			simulation["plane"] = id
-			var estimate: Dictionary = game.projected(simulation)
-			if not estimate.is_empty():
-				text_value += "\nPrognos %s netto/flyg  ·  %d%% beläggning" % [game.money(float(estimate["net"])), int(estimate["load"])]
-		var option: Button = button(text_value, existing)
-		option.custom_minimum_size.y = 66.0 if valid_range else 48.0
-		option.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		option.disabled = existing or not valid_range or not affordable
-		sheet_body.add_child(option)
-		option.pressed.connect(func() -> void:
-			var result: String = game.change_plane(route_id, id)
-			if result != "":
-				toast(result)
+		var model_id: String = str(model["id"])
+		if model_id == str(route["plane"]) or float(model["range"]) < distance:
+			continue
+		var cost: float = game.plane_change_price(route_id, model_id)
+		candidates.append({"model": model, "price": cost})
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["price"]) < float(b["price"]))
+	var affordable: Array = []
+	for option in candidates:
+		if float(option["price"]) <= game.cash:
+			affordable.append(option)
+	var offers: Array = candidates if show_all else affordable.slice(0, 3)
+	if not show_all and offers.is_empty() and not candidates.is_empty():
+		offers = [candidates[0]]
+	if not offers.is_empty():
+		sheet_body.add_child(line_break())
+		sheet_body.add_child(label("BYT FLYGPLAN", 12, MUTED, true))
+	for offer in offers:
+		var model: Dictionary = offer["model"]
+		var price: float = float(offer["price"])
+		var affordable_now: bool = price <= game.cash
+		var model_id: String = str(model["id"])
+		var description: String = "%s  ·  %d platser\n%s" % [
+			str(model["name"]), int(model["seats"]),
+			("DU FÅR " + game.money(-price)) if price < 0.0 else game.money(price) if affordable_now else ("SPARA " + game.money(price - game.cash))]
+		var action: Button = button(description, false)
+		action.custom_minimum_size.y = 60.0
+		action.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		action.disabled = not affordable_now
+		sheet_body.add_child(action)
+		action.pressed.connect(func() -> void:
+			var error: String = game.change_plane(route_id, model_id)
+			if error != "":
+				toast(error)
 			else:
 				show_plane_picker(route_id)
-				toast("Flygplanet har bytts")
+				toast("Flygplanet är utbytt")
 		)
-	sheet_body.add_child(line_break())
-	var details: Button = button("BILJETTPRIS & LINJEDETALJER", false)
-	sheet_body.add_child(details)
-	details.pressed.connect(func() -> void: show_route(route_id))
-
+	if not show_all and candidates.size() > offers.size():
+		var more: Button = button("VISA FLER FLYGPLAN", false)
+		sheet_body.add_child(more)
+		more.pressed.connect(func() -> void: show_plane_picker(route_id, true))
+	var route_details: Button = button("BILJETTPRIS", true)
+	sheet_body.add_child(route_details)
+	route_details.pressed.connect(func() -> void: show_route(route_id))
 func show_planner(from: String, to: String) -> void:
 	open_sheet("planner")
 	heading("NY FLYGLINJE", from + " → " + to, str(game.airport(from)["name"]) + " – " + str(game.airport(to)["name"]))
@@ -1187,18 +1221,18 @@ func build_tab() -> void:
 			content_body.add_child(map_btn)
 			map_btn.pressed.connect(func() -> void: show_tab("map"))
 		"fleet":
-			content_body.add_child(label("FLYGPLANSFLOTTAN", 24, INK, true))
-			content_body.add_child(label("%d aktiva flygplan  ·  Fritt modellval efter räckvidd och ekonomi" % game.routes.size(), 13, MUTED))
+			content_body.add_child(label("MIN FLOTTA", 24, INK, true))
+			if game.routes.is_empty():
+				content_body.add_child(label("Du har inga flygplan ännu.", 14, MUTED))
 			for r in game.routes:
 				var plane: Dictionary = game.catalog_by_id.get(str(r["plane"]), {})
-				var b: Button = button("%s  ·  %s - %s" % [plane.get("name", ""), r["from"], r["to"]], false)
-				content_body.add_child(b)
 				var id: String = str(r["id"])
-				b.pressed.connect(func() -> void: show_route(id))
-			content_body.add_child(line_break())
-			content_body.add_child(label("TILLGÄNGLIGA FLYGPLAN", 12, MUTED, true))
-			for p in game.catalog:
-				content_body.add_child(label("%s  ·  %d platser  ·  %d km" % [p["name"], int(p["seats"]), roundi(float(p["range"]))], 13, INK))
+				var name_text: String = str(plane.get("name", "Flygplan"))
+				var aircraft: Button = button("%s\n%s → %s" % [name_text, str(r["from"]), str(r["to"])], false)
+				aircraft.custom_minimum_size.y = 62.0
+				aircraft.alignment = HORIZONTAL_ALIGNMENT_LEFT
+				content_body.add_child(aircraft)
+				aircraft.pressed.connect(func() -> void: show_plane_picker(id))
 		"company":
 			content_body.add_child(label("DITT FLYGBOLAG", 24, INK, true))
 			content_body.add_child(label(game.company_name, 19, INK, true))
