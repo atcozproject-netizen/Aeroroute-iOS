@@ -449,8 +449,15 @@ func _run() -> void:
 	for candidate in view.content_body.find_children("*", "Label", true, false):
 		if candidate is Label:
 			operational_text += candidate.text + " "
-	if not operational_text.contains("FLYGOPERATIVT") or not operational_text.contains("Nästa landning"):
-		_fail("Live network briefing is missing from routes screen")
+	if not operational_text.contains("MINA LINJER") or operational_text.contains("FLYGOPERATIVT"):
+		_fail("Routes screen must show playable lines instead of a verbose operations report")
+		return
+	var has_route_action: bool = false
+	for route_control in view.content_body.find_children("*", "Button", true, false):
+		if (route_control as Button).text.contains("ESSA") and (route_control as Button).text.contains("ESSP"):
+			has_route_action = true
+	if not has_route_action:
+		_fail("Routes tab must allow direct selection of the player's active line")
 		return
 	# Cockpit V1.1: actual layout and both map-first actions must function,
 	# including continuing to show the player's flying plane.
