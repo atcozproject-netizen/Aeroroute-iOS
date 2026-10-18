@@ -581,8 +581,11 @@ func _run() -> void:
 	if not view.quote_card.visible or not view.quote_label.text.contains(view.game.money(float(cost_quote["price"]))):
 		_fail("Route price HUD must show real price while dragging")
 		return
-	if not view.quote_label.text.contains("SALDO") or not view.quote_label.text.contains("DU HAR RÅD"):
-		_fail("Route price HUD missing wallet and green affordable state")
+	if not view.quote_label.text.contains("Plan ") or not view.quote_label.text.contains("flygplats ") or not view.quote_label.text.contains("linje "):
+		_fail("Route quote does not explain aircraft, airport and distance costs")
+		return
+	if not view.quote_label.text.contains("KVAR EFTER KÖP"):
+		_fail("Route quote is missing remaining balance after purchase")
 		return
 	view.game.cash = 0.0
 	var poor_quote: Dictionary = view.game.route_quote("ESSA", "ESMS")
@@ -621,14 +624,35 @@ func _run() -> void:
 		return
 
 	# Both orientations use one real responsive map, not a rotated/scaled copy.
-	view._layout_for_size(Vector2(844.0, 390.0))
+	root.size = Vector2i(844, 390)
+	await process_frame
+	await process_frame
+	view._refresh_layout()
+	if view.size.x <= view.size.y:
+		_fail("Real Godot viewport remained in portrait proportions")
+		return
 	if view.viewport_layout_mode != "landscape" or view.clock_dock.anchor_top != 0.0:
 		_fail("Landscape HUD did not move flight controls away from bottom map")
 		return
 	if view.nav_bar.anchor_right != 0.0 or view.sheet.anchor_left != 1.0:
 		_fail("Landscape navigation/modal geometry invalid")
 		return
-	view._layout_for_size(Vector2(390.0, 844.0))
+	var wide: Rect2 = Rect2(Vector2.ZERO, view.size)
+	for widget in [view.cockpit_background, view.clock_dock, view.nav_bar, view.route_mode_button, view.follow_button]:
+		var bounds: Rect2 = widget.get_global_rect()
+		if bounds.position.x < -1.0 or bounds.position.y < -1.0 or bounds.end.x > wide.end.x + 1.0 or bounds.end.y > wide.end.y + 1.0:
+			_fail("Landscape gameplay control outside real screen: " + widget.name)
+			return
+	if view.cockpit_background.get_global_rect().intersects(view.clock_dock.get_global_rect()):
+		_fail("Landscape header and flight dock overlap")
+		return
+	if view.route_mode_button.get_global_rect().intersects(view.nav_bar.get_global_rect()) or view.follow_button.get_global_rect().intersects(view.nav_bar.get_global_rect()):
+		_fail("Landscape route actions overlap navigation")
+		return
+	root.size = Vector2i(390, 844)
+	await process_frame
+	await process_frame
+	view._refresh_layout()
 	if view.viewport_layout_mode != "portrait" or view.clock_dock.anchor_top != 1.0:
 		_fail("Portrait controls failed to restore")
 		return
@@ -636,5 +660,34 @@ func _run() -> void:
 	if view.clock_label.text.begins_with("DAG"):
 		_fail("Internal event time must not appear as a visible day progression")
 		return
-	print("AEROROUTE GUI SMOKE PASSED: live route prices, affordability, no days, portrait/landscape UI, existing economy and touch")
+	# Cost model: an affordable realistic starting flight, no double-charge for
+	# an already opened market and a total equal to its billed components.
+	view.game.cash = 650.0
+	var quote_first: Dictionary = view.game.route_quote("WSSS","WMKK")
+	if not bool(quote_first["ok"]):
+		_fail("Starter cash does not allow a reasonable Singapore-KL route")
+		return
+	var breakdown: Dictionary = view.game.route_cost_breakdown("WSSS","WMKK")
+	var calculated: float = float(breakdown["aircraft"])+float(breakdown["airport"])+float(breakdown["route"])
+	if absf(float(breakdown["total"]) - calculated) > 0.11 or absf(float(quote_first["price"]) - calculated) > 0.11:
+		_fail("Three displayed route cost components do not add to billed quote")
+		return
+	var fee_once: float = view.game.airport_access_cost("WMKK")
+	if fee_once <= 0.0:
+		_fail("New airport is missing one-time market opening fee")
+		return
+	view.game.owned["WMKK"] = true
+	if view.game.airport_access_cost("WMKK") != 0.0 or absf(view.game.route_cost("WSSS","WMKK") - float(quote_first["price"]) + fee_once) > 0.11:
+		_fail("Reusing an already owned airport incorrectly charges its access fee")
+		return
+	view.game.owned.erase("WMKK")
+	var cash_before_purchase: float = view.game.cash
+	var new_route_error: String = view.game.create_route("WSSS","WMKK")
+	if new_route_error != "" or absf(view.game.cash - (cash_before_purchase - float(quote_first["price"]))) > 0.11:
+		_fail("Route charged a price different from preview")
+		return
+	if not view.game.owned.has("WMKK"):
+		_fail("Purchased airport not recorded as an owned market")
+		return
+	print("AEROROUTE GUI SMOKE PASSED: consistent route prices, precise quotes and physical portrait/landscape resize")
 	quit(0)
