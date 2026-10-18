@@ -1241,19 +1241,26 @@ func build_tab() -> void:
 				dialog.popup_centered()
 			)
 			content_body.add_child(label("SPEL & INSTÄLLNINGAR", 12, MUTED, true))
-		var pause_setting: Button = button("FORTSÄTT" if game.paused else "PAUSA SPELET", false)
-		content_body.add_child(pause_setting)
-		pause_setting.pressed.connect(func() -> void:
-			_toggle_pause()
-			build_tab()
-		)
-		var speed_setting: Button = button("HASTIGHET %dx" % roundi(game.speed), false)
-		content_body.add_child(speed_setting)
-		speed_setting.pressed.connect(func() -> void:
-			game.speed = 1.0 if game.speed > 1.0 else 2.0
-			game.save_game()
-			build_tab()
-		)
+			var pause_setting: Button = button("FORTSÄTT" if game.paused else "PAUSA SPELET", false)
+			content_body.add_child(pause_setting)
+			pause_setting.pressed.connect(func() -> void:
+				_toggle_pause()
+				build_tab()
+			)
+			var speed_setting: Button = button("HASTIGHET %dx" % roundi(game.speed), false)
+			content_body.add_child(speed_setting)
+			speed_setting.pressed.connect(func() -> void:
+				game.speed = 1.0 if game.speed > 1.0 else 2.0
+				game.save_game()
+				build_tab()
+			)
+			var fir_setting: Button = button("FIR-GRÄNSER: PÅ" if fir_mode != 0 else "FIR-GRÄNSER: AV", false)
+			content_body.add_child(fir_setting)
+			fir_setting.pressed.connect(func() -> void:
+				fir_mode = 0 if fir_mode != 0 else 1
+				fir_layer.set_mode(fir_mode)
+				build_tab()
+			)
 			for kind in ["marketing", "service", "staffing"]:
 				var title: String = {"marketing":"Marknadsföring", "service":"Service", "staffing":"Personal"}[kind]
 				var line: HBoxContainer = row()
