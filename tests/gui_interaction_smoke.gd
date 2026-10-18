@@ -103,6 +103,22 @@ func _run() -> void:
 	if start_rect.position.y < -2.0 or start_rect.end.y > view.size.y + 2.0:
 		_fail("Landscape welcome screen clipped vertically")
 		return
+	# Short browser viewport: Safari may shrink usable height after rotating.
+	for narrow_size in [Vector2i(740, 320),Vector2i(667, 280)]:
+		root.size = narrow_size
+		await process_frame
+		await process_frame
+		view._refresh_layout()
+		var short_rect: Rect2 = view.start_welcome.get_global_rect()
+		if short_rect.position.y < -2.0 or short_rect.end.y > view.size.y + 2.0:
+			_fail("Short landscape onboarding clipped at " + str(narrow_size))
+			return
+		if view.start_layout.columns != 2:
+			_fail("Short landscape onboarding did not keep two-column layout")
+			return
+		if view.start_search.size.y > 42.0:
+			_fail("Search remained a tall portrait control in landscape")
+			return
 	root.size = Vector2i(390,844)
 	await process_frame
 	await process_frame
@@ -676,6 +692,29 @@ func _run() -> void:
 	if view.sheet.get_global_rect().intersects(view.nav_bar.get_global_rect()):
 		_fail("Landscape route information panel overlaps the bottom navigation")
 		return
+	if view.zoom_buttons.columns != 4:
+		_fail("Zoom/FIR map controls still use a tall portrait column in landscape")
+		return
+	for compact_size in [Vector2i(740, 320),Vector2i(667, 280)]:
+		root.size = compact_size
+		await process_frame
+		await process_frame
+		view._refresh_layout()
+		var area: Rect2 = Rect2(Vector2.ZERO,view.size)
+		for widget in [view.cockpit_background,view.clock_dock,view.nav_bar,view.zoom_buttons,view.route_mode_button,view.follow_button]:
+			var bounds: Rect2 = widget.get_global_rect()
+			if bounds.position.x < -1.0 or bounds.position.y < -1.0 or bounds.end.x > area.end.x + 1.0 or bounds.end.y > area.end.y + 1.0:
+				_fail("Short landscape control outside screen: "+widget.name+" at "+str(compact_size))
+				return
+		view._update_route_quote(cost_quote)
+		var tip: Rect2 = view.quote_card.get_global_rect()
+		if not view.quote_card.visible or view.quote_label.text.count("\n") != 1:
+			_fail("Landscape cost preview must use readable two-line compact presentation")
+			return
+		if tip.intersects(view.nav_bar.get_global_rect()) or tip.intersects(view.zoom_buttons.get_global_rect()) or tip.intersects(view.route_mode_button.get_global_rect()) or tip.intersects(view.follow_button.get_global_rect()):
+			_fail("Landscape route cost preview obscures other game controls")
+			return
+		view._update_route_quote({})
 	root.size = Vector2i(390, 844)
 	await process_frame
 	await process_frame
