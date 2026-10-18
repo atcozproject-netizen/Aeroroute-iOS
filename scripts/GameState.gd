@@ -285,16 +285,32 @@ func gates_used(icao: String) -> int:
 func gates_available(icao: String) -> bool:
 	return gates_used(icao) < (2 + int(terminals.get(icao, 1)) * 2)
 
+func airport_access_cost(code: String) -> float:
+	if owned.has(code):
+		return 0.0
+	return rounded(18.0 + float(airport(code)["rank"]) * 8.0)
+
+func route_setup_cost(a_code: String, b_code: String) -> float:
+	return rounded(18.0 + kilometers(a_code, b_code) * 0.05)
+
 func infrastructure_fee(a_code: String, b_code: String) -> float:
-	var opening_a: float = 0.0 if owned.has(a_code) else 22.0 + float(airport(a_code)["rank"]) * 28.0
-	var opening_b: float = 0.0 if owned.has(b_code) else 22.0 + float(airport(b_code)["rank"]) * 28.0
-	return roundf((20.0 + kilometers(a_code, b_code) * 0.018 + opening_a + opening_b) * 10.0) / 10.0
+	return rounded(route_setup_cost(a_code, b_code) +
+		airport_access_cost(a_code) + airport_access_cost(b_code))
+
+func route_cost_breakdown(a_code: String, b_code: String) -> Dictionary:
+	var plane: Dictionary = initial_plane(a_code, b_code)
+	if plane.is_empty():
+		return {"total":-1.0}
+	var aircraft: float = float(plane["price"])
+	var route_setup: float = route_setup_cost(a_code, b_code)
+	var airport_access: float = airport_access_cost(a_code) + airport_access_cost(b_code)
+	var total: float = rounded(aircraft + route_setup + airport_access)
+	return {"total":total, "aircraft":aircraft, "route":route_setup,
+		"airport":airport_access, "plane":str(plane["name"]),
+		"distance":kilometers(a_code, b_code)}
 
 func route_cost(a_code: String, b_code: String) -> float:
-	var p: Dictionary = initial_plane(a_code, b_code)
-	if p.is_empty():
-		return -1.0
-	return infrastructure_fee(a_code, b_code) + float(p["price"])
+	return float(route_cost_breakdown(a_code, b_code).get("total", -1.0))
 
 func route_key(a_code: String, b_code: String) -> String:
 	var both: Array = [a_code, b_code]
@@ -326,10 +342,15 @@ func route_quote(a_code: String, b_code: String) -> Dictionary:
 	if plane.is_empty():
 		quote["reason"] = "För lång sträcka för tillgängliga flygplan"
 		return quote
-	var fee: float = route_cost(a_code, b_code)
+	var breakdown: Dictionary = route_cost_breakdown(a_code, b_code)
+	var fee: float = float(breakdown["total"])
 	quote["price"] = fee
 	quote["plane"] = str(plane["name"])
 	quote["distance"] = kilometers(a_code, b_code)
+	quote["aircraft"] = breakdown["aircraft"]
+	quote["route_fee"] = breakdown["route"]
+	quote["airport_fee"] = breakdown["airport"]
+	quote["remaining"] = rounded(cash - fee)
 	if not gates_available(a_code) or not gates_available(b_code):
 		quote["reason"] = "Uppgradera terminalkapaciteten först"
 		return quote
@@ -482,7 +503,7 @@ func close_route(route_id: String) -> void:
 	if r.is_empty():
 		return
 	var p: Dictionary = catalog_by_id.get(str(r["plane"]), {})
-	cash = rounded(cash + float(p.get("price", 0.0)) * 0.45 + infrastructure_fee(str(r["from"]), str(r["to"])) * 0.2)
+	cash = rounded(cash + float(p.get("price", 0.0)) * 0.45 + route_setup_cost(str(r["from"]), str(r["to"])) * 0.2)
 	routes.erase(r)
 	save_game()
 	changed.emit()

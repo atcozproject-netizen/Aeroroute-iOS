@@ -40,6 +40,7 @@ var route_draw_enabled: bool = false
 var gesture_kind: String = "idle"
 var hold_elapsed: float = 0.0
 var preview_destination: String = ""
+var preview_balance: float = -1.0
 const HOLD_TO_ROUTE_SECONDS: float = 0.26
 
 var temporary_line_end: Vector2 = Vector2.ZERO
@@ -537,14 +538,15 @@ func pan(delta_pixels: Vector2) -> void:
 func report_route_preview(pos: Vector2) -> void:
 	if pointer_from == "" or game == null:
 		return
-	# Be forgiving to a fingertip: a destination up to 64px away may
-	# preview a quote, but a final drop still needs the 30px target.
-	var target: String = nearest_airport(pos, 64.0)
+	# Use the same airport marker radius while dragging and releasing:
+	# the previous 64px radius made the quoted destination jump unpredictably.
+	var target: String = nearest_airport(pos, 30.0)
 	if target == pointer_from:
 		target = ""
-	if target == preview_destination:
+	if target == preview_destination and is_equal_approx(preview_balance, game.cash):
 		return
 	preview_destination = target
+	preview_balance = game.cash
 	if target == "":
 		route_preview_changed.emit({"from": pointer_from, "to": "", "price": -1.0,
 			"ok": false, "reason": "Dra till en flygplats för att se priset"})
@@ -553,6 +555,7 @@ func report_route_preview(pos: Vector2) -> void:
 
 func clear_route_preview() -> void:
 	preview_destination = ""
+	preview_balance = -1.0
 	route_preview_changed.emit({})
 
 func handle_press(pos: Vector2) -> void:
@@ -566,6 +569,7 @@ func handle_press(pos: Vector2) -> void:
 	hold_elapsed = 0.0
 	gesture_kind = "pending"
 	preview_destination = ""
+	preview_balance = -1.0
 
 func handle_motion(pos: Vector2) -> void:
 	if not pointer_down:
