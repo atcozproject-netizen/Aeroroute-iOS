@@ -836,7 +836,7 @@ func _route_tapped(route_id: String) -> void:
 		return
 	if game.get_route(route_id).is_empty():
 		return
-	show_plane_picker(route_id)
+	show_route(route_id)
 
 func _draft_route(from: String, to: String) -> void:
 	world_map.route_draw_enabled = false
@@ -898,7 +898,7 @@ func show_airport(code: String) -> void:
 			var route_button: Button = button("%s   ›   %s" % [title, str(model.get("name", "Flygplan"))], false)
 			route_button.custom_minimum_size.y = 52.0
 			sheet_body.add_child(route_button)
-			route_button.pressed.connect(func() -> void: show_plane_picker(id))
+			route_button.pressed.connect(func() -> void: show_route(id))
 	else:
 		sheet_body.add_child(label("Inga anslutna linjer ännu.", 13, MUTED))
 	if connected.is_empty():
@@ -1470,7 +1470,7 @@ func _update_start_choices(search_text: String) -> void:
 		countries.sort()
 		var options: Array = []
 		if q.is_empty():
-			for item in ["Sweden", "United Kingdom", "United States", "Germany"]:
+			for item in ["Sweden", "USA", "United Kingdom", "Germany"]:
 				if seen.has(item):
 					options.append(item)
 		else:
