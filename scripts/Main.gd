@@ -1437,7 +1437,7 @@ func show_start() -> void:
 func _country_display_name(country: String) -> String:
 	var names: Dictionary = {"Sweden":"Sverige", "Norway":"Norge", "Denmark":"Danmark",
 		"Finland":"Finland", "Germany":"Tyskland", "United Kingdom":"Storbritannien",
-		"United States":"USA", "United Arab Emirates":"Förenade Arabemiraten",
+		"United States":"USA", "USA":"USA", "UAE":"Förenade Arabemiraten", "United Arab Emirates":"Förenade Arabemiraten",
 		"France":"Frankrike", "Spain":"Spanien", "Italy":"Italien", "Netherlands":"Nederländerna"}
 	return str(names.get(country, country))
 
