@@ -215,7 +215,8 @@ func candidate_airports() -> Array:
 		var code: String = str(airport["icao"])
 		var owned: bool = game.owned.has(code)
 		var focused: bool = code == focused_airport
-		if not owned and not focused and not game.is_featured(code):
+		# At close zoom even smaller local airports can be reached from the map.
+		if not owned and not focused and not game.is_featured(code) and zoom < 24.0:
 			continue
 		if not owned and not focused and int(airport["rank"]) < minimum_rank:
 			continue
@@ -576,11 +577,9 @@ func handle_motion(pos: Vector2) -> void:
 		return
 	if gesture_kind == "pending" and pointer_start.distance_to(pos) > drag_threshold:
 		pointer_moved = true
-		if route_draw_enabled and pointer_from != "":
-			gesture_kind = "route"
-		else:
-			# Every ordinary swipe pans, even when it begins on a marker.
-			gesture_kind = "pan"
+		# A swipe ALWAYS pans. Route creation only happens after activating
+		# NEW ROUTE and tapping two airport markers, never by holding/dragging.
+		gesture_kind = "pan"
 	if gesture_kind == "pan":
 		pan(pos - pointer_last)
 	elif gesture_kind == "route":
@@ -595,7 +594,7 @@ func handle_release(pos: Vector2) -> void:
 	if not pointer_down:
 		return
 	var origin_code: String = pointer_from
-	var was_route: bool = gesture_kind == "route"
+	var was_route: bool = gesture_kind == "route" # Retained for older saves; never entered through touch.
 	var was_tap: bool = gesture_kind == "pending"
 	pointer_down = false
 	pointer_from = ""
@@ -664,12 +663,6 @@ func _process(delta: float) -> void:
 	if gesture_captured and Time.get_ticks_msec() - last_touch_event_ms > 8500:
 		reset_gesture()
 		return
-	if pointer_down and gesture_kind == "pending" and pointer_from != "" and not route_draw_enabled and not touch_was_pinch:
-		hold_elapsed += minf(delta, 0.25)
-		if hold_elapsed >= HOLD_TO_ROUTE_SECONDS:
-			gesture_kind = "route"
-			report_route_preview(pointer_last)
-			queue_redraw()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
