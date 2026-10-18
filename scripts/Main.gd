@@ -486,8 +486,8 @@ func create_scene() -> void:
 	quote_card.anchor_bottom = 1.0
 	quote_card.offset_left = -169.0
 	quote_card.offset_right = 169.0
-	quote_card.offset_top = -314.0
-	quote_card.offset_bottom = -216.0
+	quote_card.offset_top = -332.0
+	quote_card.offset_bottom = -218.0
 	quote_card.visible = false
 	add_child(quote_card)
 	quote_label = label("", 11, Color("fff6e6"), true)
@@ -539,10 +539,14 @@ func _update_route_quote(quote: Dictionary) -> void:
 		var amount_airport: float = float(quote.get("airport_fee", 0.0))
 		var amount_route: float = float(quote.get("route_fee", 0.0))
 		var detail: String = "Plan %s + flygplats %s + linje %s" % [game.money(amount_aircraft), game.money(amount_airport), game.money(amount_route)]
+		var estimated_net: float = float(quote.get("estimated_net", 0.0))
+		var pax: int = roundi(float(quote.get("estimated_pax", 0.0)))
+		var seats: int = int(quote.get("available_seats", 0))
+		var forecast_text: String = "PROGNOS %s/flyg  ·  %d/%d passagerare" % [game.money(estimated_net), pax, seats]
 		if is_ok:
-			quote_label.text = "%s → %s    TOTALT %s\n%s\n✓ KVAR EFTER KÖP: %s" % [quote["from"], destination, game.money(price), detail, game.money(float(quote["remaining"]))]
+			quote_label.text = "%s → %s    TOTALT %s\n%s\n✓ KVAR: %s\n%s" % [quote["from"], destination, game.money(price), detail, game.money(float(quote["remaining"])), forecast_text]
 		else:
-			quote_label.text = "%s → %s    TOTALT %s\n%s\n%s" % [quote["from"], destination, game.money(price), detail, reason]
+			quote_label.text = "%s → %s    TOTALT %s\n%s\n%s\n%s" % [quote["from"], destination, game.money(price), detail, reason, forecast_text]
 
 func _refresh_layout() -> void:
 	_layout_for_size(size)
@@ -599,8 +603,8 @@ func _layout_for_size(view_size: Vector2) -> void:
 	if quote_card != null:
 		quote_card.anchor_top = 0.0 if landscape else 1.0
 		quote_card.anchor_bottom = 0.0 if landscape else 1.0
-		quote_card.offset_top = 115.0 if landscape else -314.0
-		quote_card.offset_bottom = 213.0 if landscape else -216.0
+		quote_card.offset_top = 115.0 if landscape else -332.0
+		quote_card.offset_bottom = 229.0 if landscape else -218.0
 		quote_card.offset_left = -182.0 if landscape else -169.0
 		quote_card.offset_right = 182.0 if landscape else 169.0
 	if sheet != null:
