@@ -229,7 +229,6 @@ func create_scene() -> void:
 	world_map.configure(game)
 	world_map.airport_tapped.connect(_airport_tapped)
 	world_map.route_tapped.connect(_route_tapped)
-	world_map.route_drafted.connect(_quick_create_route)
 	world_map.route_preview_changed.connect(_update_route_quote)
 	fir_layer = FirScript.new()
 	fir_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -838,24 +837,6 @@ func _route_tapped(route_id: String) -> void:
 	if game.get_route(route_id).is_empty():
 		return
 	show_plane_picker(route_id)
-
-func _quick_create_route(from: String, to: String) -> void:
-	# Fly Corp-like: draw between two airports and the route opens immediately
-	# with an automatically selected suitable plane. No menu selection required.
-	if not game.initialized:
-		return
-	if from == to:
-		return
-	var id: String = game.route_key(from, to)
-	if not game.get_route(id).is_empty():
-		show_plane_picker(id)
-		return
-	var error: String = game.create_route(from, to)
-	if error != "":
-		toast(error)
-		return
-	world_map.animate_new_route(id)
-	toast("Ny linje: %s ↔ %s" % [from, to])
 
 func _draft_route(from: String, to: String) -> void:
 	world_map.route_draw_enabled = false
