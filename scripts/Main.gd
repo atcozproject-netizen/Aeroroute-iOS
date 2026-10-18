@@ -1023,56 +1023,49 @@ func show_route(id: String) -> void:
 	if r.is_empty():
 		close_sheet()
 		return
-	var projection: Dictionary = game.projected(r)
+	var forecast: Dictionary = game.projected(r)
+	if forecast.is_empty():
+		close_sheet()
+		return
 	current_route = id
 	open_sheet("route")
-	heading("DIN FLYGLINJE", str(r["from"]) + " ↔ " + str(r["to"]), game.distance_label(str(r["from"]), str(r["to"])))
-	var cols: HBoxContainer = row(6)
-	sheet_body.add_child(cols)
-	var revenue_tile: PanelContainer = info_tile("INTÄKTER / FLYG", game.money(float(projection["revenue"])))
-	var cost_tile: PanelContainer = info_tile("KOSTNADER / FLYG", game.money(float(projection["cost"])))
-	var net_tile: PanelContainer = info_tile("NETTO / FLYG", game.money(float(projection["net"])))
-	cols.add_child(revenue_tile)
-	cols.add_child(cost_tile)
-	cols.add_child(net_tile)
-	var p: Dictionary = game.catalog_by_id.get(str(r["plane"]), {})
-	sheet_body.add_child(label(str(p.get("name", "Flygplan")), 16, INK, true))
-	sheet_body.add_child(label("%d platser  ·  %d%% beläggning" % [int(projection["seats"]), int(projection["load"])], 12, MUTED))
-	flight_eta = label("Nästa landning: %d sek" % int(ceil((1.0 - float(r["progress"])) * game.flight_duration(r) / game.speed)), 12, Color("548b87"))
+	heading("FLYGLINJE", str(r["from"]) + " ↔ " + str(r["to"]))
+	var plane: Dictionary = game.catalog_by_id.get(str(r["plane"]), {})
+	sheet_body.add_child(label(str(plane.get("name", "Flygplan")), 15, INK, true))
+	var net_tile: PanelContainer = info_tile("RESULTAT / FLYG", game.money(float(forecast["net"])))
+	sheet_body.add_child(net_tile)
+	flight_eta = label("Landar om %d sek" % ceili((1.0 - float(r["progress"])) * game.flight_duration(r) / maxf(0.1, game.speed)), 12, MUTED)
 	sheet_body.add_child(flight_eta)
-	sheet_body.add_child(line_break())
-	sheet_body.add_child(label("BILJETTPRIS", 11, MUTED))
+	sheet_body.add_child(label("BILJETTPRIS", 11, MUTED, true))
 	var ticket_row: HBoxContainer = row()
 	sheet_body.add_child(ticket_row)
-	var fare_value: Label = label(game.money(float(r["fare"])), 15, INK, true)
 	var slider := HSlider.new()
 	slider.min_value = 0.55
-	slider.max_value = maxf(2.5, (0.85 + float(projection["distance"]) * 0.00028) * 2.1)
+	slider.max_value = maxf(2.5, (0.85 + float(forecast["distance"]) * 0.00028) * 2.1)
 	slider.step = 0.05
 	slider.value = float(r["fare"])
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ticket_row.add_child(slider)
+	var fare_value: Label = label(game.money(float(r["fare"])), 15, INK, true)
 	ticket_row.add_child(fare_value)
-	var live_estimate: Label = label("Prognos: %d/%d platser  ·  %s netto/flyg" % [roundi(float(projection["pax"])), int(projection["seats"]), game.money(float(projection["net"]))], 12, Color("4d817b"))
+	var live_estimate: Label = label("Prognos: %d/%d platser  ·  %s netto/flyg" % [
+		roundi(float(forecast["pax"])), int(forecast["seats"]), game.money(float(forecast["net"]))], 12, MUTED)
 	sheet_body.add_child(live_estimate)
 	var best: Dictionary = game.fare_recommendation(id)
-	var strategy_label: Label = label("", 12, MUTED)
-	if not best.is_empty():
-		strategy_label.text = "Marknadsanalys: %s/biljett kan ge %s netto/flyg (%d%% beläggning)." % [game.money(float(best["fare"])), game.money(float(best["net"])), int(best["load"])]
-		sheet_body.add_child(strategy_label)
-	var smart_price: Button = button("ANVÄND FÖRESLAGET BILJETTPRIS", false)
+	var smart_price: Button = button("FÖRESLAGET PRIS  ·  %s" % game.money(float(best["fare"])) if not best.is_empty() else "FÖRESLAGET PRIS", false)
 	smart_price.disabled = best.is_empty() or absf(float(best.get("fare", r["fare"])) - float(r["fare"])) < 0.004
+	smart_price.visible = not smart_price.disabled
 	sheet_body.add_child(smart_price)
 	slider.value_changed.connect(func(value: float) -> void:
 		r["fare"] = game.rounded(value)
 		fare_value.text = game.money(float(r["fare"]))
 		var estimate: Dictionary = game.projected(r)
 		if not estimate.is_empty():
-			set_info_tile_value(revenue_tile, game.money(float(estimate["revenue"])))
-			set_info_tile_value(cost_tile, game.money(float(estimate["cost"])))
 			set_info_tile_value(net_tile, game.money(float(estimate["net"])))
-			live_estimate.text = "Prognos: %d/%d platser  ·  %s netto/flyg" % [roundi(float(estimate["pax"])), int(estimate["seats"]), game.money(float(estimate["net"]))]
+			live_estimate.text = "Prognos: %d/%d platser  ·  %s netto/flyg" % [
+				roundi(float(estimate["pax"])), int(estimate["seats"]), game.money(float(estimate["net"]))]
 		smart_price.disabled = best.is_empty() or absf(float(best.get("fare", r["fare"])) - float(r["fare"])) < 0.004
+		smart_price.visible = not smart_price.disabled
 	)
 	slider.drag_ended.connect(func(_value_changed: bool) -> void: game.save_game())
 	slider.focus_exited.connect(func() -> void: game.save_game())
@@ -1081,13 +1074,11 @@ func show_route(id: String) -> void:
 			return
 		slider.value = float(best["fare"])
 		game.save_game()
-		smart_price.disabled = true
-		toast("Biljettpriset är justerat efter den aktuella efterfrågan")
+		toast("Biljettpriset är ändrat")
 	)
-	var choose_aircraft: Button = button("BYT FLYGPLAN  ·  VISA ALLA MODELLER")
+	var choose_aircraft: Button = button("BYT FLYGPLAN")
 	sheet_body.add_child(choose_aircraft)
 	choose_aircraft.pressed.connect(func() -> void: show_plane_picker(id))
-
 func show_search() -> void:
 	if not game.initialized:
 		return
@@ -1180,51 +1171,18 @@ func build_tab() -> void:
 	_clear_content()
 	match active_tab:
 		"routes":
-			content_body.add_child(label("DINA FLYGLINJER", 24, INK, true))
-			content_body.add_child(label("%d flygningar  ·  Senaste resultat: %s" % [game.total_flights, game.money(game.last_profit)], 12, MUTED))
-			content_body.add_child(label("%d linjer · %d flygplatser" % [game.routes.size(), game.owned.size()], 13, MUTED))
-			var report: Dictionary = game.network_snapshot()
-			var situation: PanelContainer = add_styled_panel(Color("e5f1eb"), 14)
-			content_body.add_child(situation)
-			var situation_text: VBoxContainer = stack(4)
-			situation.add_child(situation_text)
-			situation_text.add_child(label("LIVE · FLYGOPERATIVT", 11, Color("56837c"), true))
-			if int(report["routes"]) > 0:
-				situation_text.add_child(label("%s netto per flygomgång" % game.money(float(report["net"])), 18, INK, true))
-				situation_text.add_child(label("%d%% förväntad beläggning · %d olönsamma linjer" % [int(report["load"]), int(report["loss_routes"])], 12, MUTED))
-				situation_text.add_child(label("Nästa landning: %s om %d sek" % [str(report["next_airport"]), int(report["next_seconds"])], 12, MUTED))
-			else:
-				situation_text.add_child(label("Ditt nätverk väntar på första flygningen", 13, INK))
-			# Player-visible operating opportunities, not XP quests.
-			for active_event in game.route_events:
-				if int(active_event.get("ends", 0)) <= game.day:
-					continue
-				var event_airport: String = str(active_event.get("airport", ""))
-				var event_title: String = str(active_event.get("title", "Trafikökning"))
-				var extra_demand: int = roundi((float(active_event.get("multiplier", 1.0)) - 1.0) * 100.0)
-				var days_left: int = int(active_event["ends"]) - game.day
-				var event_card: Button = button("★ %s · %s  +%d%%  (%d dagar)" % [event_title, event_airport, extra_demand, days_left], false)
-				content_body.add_child(event_card)
-				event_card.pressed.connect(func() -> void: show_airport(event_airport))
-			for r in game.routes:
-				var projection: Dictionary = game.projected(r)
-				var net: float = float(projection["net"])
-				var icon_text: String = "↑" if net > 0.0 else "↓" if net < 0.0 else "•"
-				var b: Button = button("%s %s → %s  %s" % [icon_text, r["from"], r["to"], game.money(net)], false)
-				content_body.add_child(b)
-				var id: String = str(r["id"])
-				b.pressed.connect(func() -> void: show_route(id))
+			content_body.add_child(label("MINA LINJER", 24, INK, true))
 			if game.routes.is_empty():
-				content_body.add_child(label("Tryck LINJE på kartan, välj två flygplatser och starta ditt nätverk.", 15, MUTED))
-			content_body.add_child(line_break())
-			content_body.add_child(label("RUTTRADAR · NÄSTA MÖJLIGHETER", 11, MUTED, true))
-			for idea in game.recommended_destinations(game.home, 3):
-				var choice_code: String = str(idea["code"])
-				var opening_cost: float = float(idea["cost"])
-				var suggestion: Button = button("%s · %d km · %s" % [choice_code, roundi(float(idea["km"])), game.money(opening_cost)], false)
-				content_body.add_child(suggestion)
-				suggestion.pressed.connect(func() -> void: show_planner(game.home, choice_code))
-			var map_btn: Button = button("+ NY LINJE PÅ KARTAN")
+				content_body.add_child(label("Dra mellan två flygplatser för att öppna en linje.", 14, MUTED))
+			for r in game.routes:
+				var id: String = str(r["id"])
+				var projected: Dictionary = game.projected(r)
+				var result_text: String = game.money(float(projected.get("net", 0.0)))
+				var line_button: Button = button("%s ↔ %s  ·  %s/flyg" % [str(r["from"]), str(r["to"]), result_text], false)
+				line_button.custom_minimum_size.y = 54.0
+				content_body.add_child(line_button)
+				line_button.pressed.connect(func() -> void: show_route(id))
+			var map_btn: Button = button("NY FLYGLINJE")
 			content_body.add_child(map_btn)
 			map_btn.pressed.connect(func() -> void: show_tab("map"))
 		"fleet":
