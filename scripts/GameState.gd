@@ -351,6 +351,14 @@ func route_quote(a_code: String, b_code: String) -> Dictionary:
 	quote["route_fee"] = breakdown["route"]
 	quote["airport_fee"] = breakdown["airport"]
 	quote["remaining"] = rounded(cash - fee)
+	var kilometers_flight: float = float(breakdown["distance"])
+	var sample_route: Dictionary = {"id":route_key(a_code, b_code), "from":a_code, "to":b_code,
+		"plane":str(plane["id"]), "fare":rounded(0.85 + kilometers_flight * 0.00028),
+		"direction":0, "progress":0.0}
+	var forecast: Dictionary = projected(sample_route)
+	quote["estimated_net"] = float(forecast.get("net", 0.0))
+	quote["estimated_pax"] = float(forecast.get("pax", 0.0))
+	quote["available_seats"] = int(forecast.get("seats", plane["seats"]))
 	if not gates_available(a_code) or not gates_available(b_code):
 		quote["reason"] = "Uppgradera terminalkapaciteten först"
 		return quote
