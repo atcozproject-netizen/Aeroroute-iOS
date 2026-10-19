@@ -6,18 +6,18 @@ signal route_tapped(route_id: String)
 signal route_preview_changed(quote: Dictionary)
 signal route_drafted(start_code: String, end_code: String)
 
-const SEA_TOP = Color("72b8c7")
-const SEA_BOTTOM = Color("72b8c7")
-const LAND_FILL = Color("f1e6d1")
-const LAND_EDGE = Color("e4d7ba")
-const NODE_FREE = Color("265b70")
-const NODE_OWNED = Color("f2b777")
-const ROUTE_LINE = Color("de986d")
-const ROUTE_POSITIVE = Color("469787")
-const ROUTE_NEGATIVE = Color("cd8275")
-const ROUTE_NEUTRAL = Color("d5a777")
-const ROUTE_GLOW = Color(1.0, 0.83, 0.64, 0.29)
-const OWNED_HALO = Color(0.98, 0.75, 0.52, 0.21)
+const SEA_TOP = Color("16394b")
+const SEA_BOTTOM = Color("16394b")
+const LAND_FILL = Color("516f70")
+const LAND_EDGE = Color("6d8986")
+const NODE_FREE = Color("afc7c4")
+const NODE_OWNED = Color("f2c58c")
+const ROUTE_LINE = Color("dca774")
+const ROUTE_POSITIVE = Color("65b3a2")
+const ROUTE_NEGATIVE = Color("d58f87")
+const ROUTE_NEUTRAL = Color("c9a16e")
+const ROUTE_GLOW = Color(1.0, 0.80, 0.58, 0.21)
+const OWNED_HALO = Color(0.98, 0.76, 0.54, 0.16)
 const LAND_TEXTURE: Texture2D = preload("res://data/world_land.png")
 const DETAIL_TILE_DEGREES: float = 20.0
 const DETAIL_BEGIN_ZOOM: float = 20.0
@@ -140,13 +140,12 @@ func airport_label_text(airport: Dictionary) -> String:
 	return code
 
 func airport_label_budget() -> int:
-	if zoom < 6.0:
+	# A world atlas, not a flight-data diagram: prioritized labels only.
+	if zoom < 10.0:
+		return 2
+	if zoom < 25.0:
 		return 3
-	if zoom < 15.0:
-		return 4
-	if zoom < 35.0:
-		return 5
-	return 6
+	return 4
 
 func airport_label_priority(item: Dictionary) -> int:
 	var code: String = str(item["code"])
@@ -178,7 +177,7 @@ func label_candidates(pins: Array) -> Array:
 		if picked.size() >= limit:
 			break
 		var p: Vector2 = item["position"]
-		if p.y < 174.0 or p.y > size.y - 170.0:
+		if p.y < 111.0 or p.y > size.y - 105.0:
 			continue
 		var value: String = airport_label_text(item["airport"])
 		var label_size: int = 11
@@ -188,7 +187,7 @@ func label_candidates(pins: Array) -> Array:
 		if rect.position.x < 9.0 or rect.end.x > size.x - 12.0:
 			continue
 		# Keep space for the zoom/FIR/route controls on the right.
-		if rect.end.x > size.x - 76.0 and rect.position.y < 545.0:
+		if rect.end.x > size.x - 55.0 and rect.position.y < 140.0:
 			continue
 		var collides: bool = false
 		for prev in rects:
@@ -250,6 +249,11 @@ func candidate_airports() -> Array:
 					break
 		if not collide:
 			result.append(item)
+		# Prioritize HUBs, connected markets and major airports. The expanded
+		# database stays searchable; never dump every minor dot on the screen.
+		var visible_limit: int = 16 if zoom < 7.0 else 23 if zoom < 19.0 else 31
+		if result.size() >= visible_limit:
+			break
 	return result
 
 func center_on(code: String) -> void:
@@ -354,8 +358,8 @@ func _draw() -> void:
 			arc = arc.slice(0, steps)
 		var selected: bool = str(r["id"]) == focused_route_id
 		var halo: Color = Color(color.r, color.g, color.b, 0.31 if selected else 0.18)
-		draw_polyline(arc, halo, 9.0 if selected else 4.4, true)
-		draw_polyline(arc, Color("ffd499") if selected else color, 3.5 if selected else 2.0, true)
+		draw_polyline(arc, halo, 6.8 if selected else 3.5, true)
+		draw_polyline(arc, Color("ffd499") if selected else color, 2.8 if selected else 1.6, true)
 		if str(r["id"]) == reveal_route_id and reveal_progress < 1.0:
 			draw_circle(arc[arc.size() - 1], 4.7, Color(1.0, 0.94, 0.76, 0.89))
 
@@ -370,20 +374,20 @@ func _draw() -> void:
 		var owned: bool = bool(item["owned"])
 		var rank: int = int(item["airport"]["rank"])
 		var focused: bool = bool(item["focused"])
-		var radius: float = (3.2 if zoom < 8.0 else 3.8 if zoom < 24.0 else 4.1) + (1.0 if owned or focused else 0.0)
+		var radius: float = (2.3 if zoom < 8.0 else 2.8 if zoom < 24.0 else 3.2) + (1.4 if owned or focused else 0.0)
 		if owned or focused:
 			draw_circle(p, radius + 6.0, OWNED_HALO)
 		elif rank >= 7 and zoom >= 5.0:
 			draw_circle(p, radius + 3.0, Color(1.0, 1.0, 1.0, 0.14))
-		draw_circle(p, radius + 1.55, Color(0.995, 0.995, 0.98, .96))
+		draw_circle(p, radius + 0.8, Color(0.93, 0.95, 0.90, 0.70))
 		draw_circle(p, radius, NODE_OWNED if owned else NODE_FREE)
 		if owned and zoom > 7.0:
 			draw_circle(p, 1.5, Color("fff0cf"))
 	for item in label_candidates(pins):
 		var tx: Vector2 = item["pos"]
 		if bool(item["focused"]):
-			draw_rect(item["rect"].grow(2.0), Color(0.97, 0.98, 0.95, 0.94))
-		draw_string(ThemeDB.fallback_font, tx, str(item["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("315764"))
+			draw_rect(item["rect"].grow(2.0), Color(0.08, 0.20, 0.26, 0.93))
+		draw_string(ThemeDB.fallback_font, tx, str(item["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("f5e6cc") if bool(item["focused"]) or bool(item["owned"]) else Color("d2dfdc"))
 
 	var origin: String = pointer_from if pointer_down and gesture_kind == "route" and pointer_from != "" else route_origin
 	if origin != "" and game.airports_by_code.has(origin):
