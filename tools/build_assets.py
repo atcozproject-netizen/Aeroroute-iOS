@@ -150,7 +150,7 @@ def build_world_texture() -> None:
             draw.polygon(pts,fill=255)
     mask=mask.resize((WIDTH,HEIGHT),Image.Resampling.LANCZOS)
     # Premultiplied alpha artwork; transparent seas are drawn by Godot.
-    land=Image.new("RGB",(WIDTH,HEIGHT),(241,230,209))
+    land=Image.new("RGB",(WIDTH,HEIGHT),(81,111,112))
     land.putalpha(mask)
     # Coastline shading gives the continents clear silhouettes without 3-D terrain.
     # Keep texture at 4K but PNG-compress to limit iPhone download and VRAM.
