@@ -80,7 +80,7 @@ jobs:
           <style id="aeroroute-responsive-game">
             html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
             #canvas { display: block; touch-action: none; }
-            body { background: #72b8c7; }
+            body { background: #16394b; }
           </style>
           """
           html=html.replace('</head>',responsive_css+'</head>')
