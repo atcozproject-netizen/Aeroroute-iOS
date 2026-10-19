@@ -83,8 +83,20 @@ jobs:
             body { background: #16394b; }
           </style>
           """
-          html=html.replace('</head>',responsive_css+'</head>')
+          pwa_meta = """<meta name="theme-color" content="#16394b">
+          <meta name="apple-mobile-web-app-capable" content="yes">
+          <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+          <meta name="apple-mobile-web-app-title" content="Aeroroute">
+          <link rel="manifest" href="manifest.webmanifest">"""
+          html=html.replace('</head>', responsive_css + pwa_meta + '</head>')
           p.write_text(html)
+          import json
+          (Path('build')/'manifest.webmanifest').write_text(json.dumps({
+            'name':'Aeroroute — Airline Empire', 'short_name':'Aeroroute',
+            'display':'standalone', 'start_url':'./', 'scope':'./',
+            'background_color':'#16394b', 'theme_color':'#16394b',
+            'orientation':'any'
+          }, ensure_ascii=False))
           PY
 
       - name: Configure Pages
