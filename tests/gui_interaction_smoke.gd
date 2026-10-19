@@ -621,7 +621,7 @@ func _run() -> void:
 	await process_frame
 	var aircraft_actions: int = 0
 	for node in view.sheet_body.find_children("*", "Button", true, false):
-		if node is Button and node.text.contains("säten"):
+		if node is Button and node.text.contains("platser"):
 			aircraft_actions += 1
 	if aircraft_actions < 1 or aircraft_actions > 3:
 		var available_names: Array[String] = []
