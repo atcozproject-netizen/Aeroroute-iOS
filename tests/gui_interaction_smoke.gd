@@ -624,7 +624,10 @@ func _run() -> void:
 		if node is Button and node.text.contains("säten"):
 			aircraft_actions += 1
 	if aircraft_actions < 1 or aircraft_actions > 3:
-		_fail("Aircraft picker should offer one to three relevant models, not the complete catalog")
+		var available_names: Array[String] = []
+		for candidate_button in view.sheet_body.find_children("*", "Button", true, false):
+			available_names.append(str((candidate_button as Button).text))
+		_fail("Aircraft picker count=%d, cash=%s, buttons=%s" % [aircraft_actions, str(view.game.cash), str(available_names)])
 		return
 	# Multiple connected routes must not imply changing every plane at once.
 	var second_model: Dictionary = view.game.initial_plane("ESSA", "ESGG")
