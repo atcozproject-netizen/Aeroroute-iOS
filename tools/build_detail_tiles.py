@@ -17,8 +17,8 @@ SUPERSAMPLE=1536
 DEGREES=20
 COLUMNS=18
 ROWS=9
-SEA=(114,184,199)
-LAND=(241,230,209)
+SEA=(22,57,75)
+LAND=(81,111,112)
 SOURCE="https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson"
 IMPORTANT={"ESSA","ESSP","ESGJ","ESGG","ESMS","ESSV","EKCH","EGLL","KJFK","OMDB","WSSS","EDDF","LFPG","KLAX","RJTT","YSSY"}
 
