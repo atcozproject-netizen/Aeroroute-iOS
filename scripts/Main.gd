@@ -6,12 +6,12 @@ const MapScript = preload("res://scripts/WorldMap.gd")
 const FlightScript = preload("res://scripts/FlightLayer.gd")
 const FirScript = preload("res://scripts/FirLayer.gd")
 const ProfitScript = preload("res://scripts/ProfitEffects.gd")
-const PAPER = Color("fffdf5")
-const INK = Color("254853")
-const MUTED = Color("7f9a9d")
-const DARK = Color("294f5d")
-const MINT = Color("edf4ef")
-const GOLD = Color("e9b68e")
+const PAPER = Color("f6f1e8")
+const INK = Color("223940")
+const MUTED = Color("78918e")
+const DARK = Color("193742")
+const MINT = Color("edf1e9")
+const GOLD = Color("e6b783")
 
 var game = StateScript.new()
 var world_map
@@ -133,8 +133,8 @@ func add_styled_panel(color: Color, radius: int = 20) -> PanelContainer:
 	s.content_margin_right = 15
 	s.content_margin_top = 13
 	s.content_margin_bottom = 13
-	s.shadow_color = Color(0.10, 0.19, 0.20, 0.09)
-	s.shadow_size = 4
+	s.shadow_color = Color(0.01, 0.07, 0.10, 0.16)
+	s.shadow_size = 3
 	p.add_theme_stylebox_override("panel", s)
 	return p
 
@@ -160,12 +160,12 @@ func button(text: String, filled: bool = true) -> Button:
 	b.add_theme_color_override("font_focus_color", PAPER if filled else DARK)
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = DARK if filled else Color("e7f0eb")
-	normal.shadow_size = 2
-	normal.shadow_color = Color(0.10, 0.19, 0.20, 0.08)
-	normal.corner_radius_top_left = 12
-	normal.corner_radius_top_right = 12
-	normal.corner_radius_bottom_left = 12
-	normal.corner_radius_bottom_right = 12
+	normal.shadow_size = 0
+	normal.shadow_color = Color(0.0, 0.0, 0.0, 0.0)
+	normal.corner_radius_top_left = 13
+	normal.corner_radius_top_right = 13
+	normal.corner_radius_bottom_left = 13
+	normal.corner_radius_bottom_right = 13
 	normal.content_margin_left = 13
 	normal.content_margin_right = 13
 	b.add_theme_stylebox_override("normal", normal)
@@ -254,7 +254,7 @@ func create_scene() -> void:
 	add_child(profit_layer)
 	profit_layer.setup(game, world_map)
 	# Opaque, non-interactive header gives the brand and counters proper readability.
-	var header: PanelContainer = add_styled_panel(Color(0.065, 0.19, 0.23, 0.96), 20)
+	var header: PanelContainer = add_styled_panel(Color(0.065, 0.16, 0.21, 0.97), 21)
 	cockpit_background = header
 	var header_style: StyleBoxFlat = header.get_theme_stylebox("panel") as StyleBoxFlat
 	header_style.content_margin_left = 0
@@ -262,14 +262,14 @@ func create_scene() -> void:
 	header_style.content_margin_top = 0
 	header_style.content_margin_bottom = 0
 	header_style.shadow_color = Color(0.04, 0.17, 0.20, 0.24)
-	header_style.shadow_size = 10
-	header_style.border_width_bottom = 2
-	header_style.border_color = Color("e5b979")
+	header_style.shadow_size = 5
+	header_style.border_width_bottom = 1
+	header_style.border_color = Color(0.66, 0.80, 0.77, 0.20)
 	header.anchor_right = 1.0
 	header.offset_left = 8.0
 	header.offset_right = -8.0
 	header.offset_top = 6.0
-	header.offset_bottom = 119.0
+	header.offset_bottom = 95.0
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(header)
 	var top: VBoxContainer = stack(6)
@@ -277,11 +277,12 @@ func create_scene() -> void:
 	top.anchor_right = 1.0
 	top.offset_left = 19.0
 	top.offset_right = -19.0
-	top.offset_top = 14.0
+	top.offset_top = 10.0
 	add_child(top)
 	var brand_row: HBoxContainer = row(9)
 	top.add_child(brand_row)
 	var logo_box: PanelContainer = add_styled_panel(Color("255b69"), 12)
+	logo_box.visible = false
 	var logo_style: StyleBoxFlat = logo_box.get_theme_stylebox("panel") as StyleBoxFlat
 	logo_style.content_margin_left = 4
 	logo_style.content_margin_right = 4
@@ -295,7 +296,7 @@ func create_scene() -> void:
 	logo_box.add_child(mark)
 	var brand_text: VBoxContainer = stack(0)
 	brand_row.add_child(expanded(brand_text))
-	brand_text.add_child(label("AEROROUTE", 17, Color("fff9e8"), true))
+	brand_text.add_child(label("AEROROUTE", 18, Color("fff9e8"), true))
 	brand_status = label("FLYGOPERATIVT", 9, Color("a8ccd0"))
 	brand_status.autowrap_mode = TextServer.AUTOWRAP_OFF
 	brand_status.clip_text = true
@@ -315,12 +316,12 @@ func create_scene() -> void:
 		world_map.reset_gesture()
 		world_map.center_on(game.home)
 	)
-	hud = add_styled_panel(Color(0.19, 0.39, 0.43, 0.76), 11)
+	hud = add_styled_panel(Color(0.24, 0.38, 0.43, 0.28), 9)
 	var compact_style: StyleBoxFlat = hud.get_theme_stylebox("panel") as StyleBoxFlat
 	compact_style.content_margin_left = 10
 	compact_style.content_margin_right = 10
-	compact_style.content_margin_top = 5
-	compact_style.content_margin_bottom = 5
+	compact_style.content_margin_top = 3
+	compact_style.content_margin_bottom = 3
 	top.add_child(hud)
 	var stats: HBoxContainer = row(7)
 	hud.add_child(stats)
@@ -328,15 +329,15 @@ func create_scene() -> void:
 	stats.add_child(build_stat("LINJER", "0", "routes"))
 	# Passenger counts remain available in the company panel.
 
-	nav_bar = add_styled_panel(Color(0.07, 0.19, 0.24, 0.96), 19)
+	nav_bar = add_styled_panel(Color(0.06, 0.15, 0.20, 0.96), 21)
 	var nav_back: StyleBoxFlat = nav_bar.get_theme_stylebox("panel") as StyleBoxFlat
 	nav_back.shadow_color = Color(0.02, 0.15, 0.22, 0.26)
-	nav_back.shadow_size = 9
+	nav_back.shadow_size = 3
 	var nav_style: StyleBoxFlat = nav_bar.get_theme_stylebox("panel") as StyleBoxFlat
-	nav_style.content_margin_top = 5
-	nav_style.content_margin_bottom = 5
-	nav_style.content_margin_left = 8
-	nav_style.content_margin_right = 8
+	nav_style.content_margin_top = 4
+	nav_style.content_margin_bottom = 4
+	nav_style.content_margin_left = 5
+	nav_style.content_margin_right = 5
 	nav_bar.anchor_top = 1.0
 	nav_bar.anchor_bottom = 1.0
 	nav_bar.anchor_right = 1.0
@@ -349,7 +350,7 @@ func create_scene() -> void:
 		var b: Button = button(str(item["name"]), false)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size.y = 42.0
-		b.add_theme_font_size_override("font_size", 11)
+		b.add_theme_font_size_override("font_size", 12)
 		nav.add_child(b)
 		var id: String = str(item["id"])
 		b.pressed.connect(func() -> void: show_tab(id))
@@ -394,7 +395,7 @@ func create_scene() -> void:
 	)
 	route_mode_button = button("NY LINJE", true)
 	var route_action_style: StyleBoxFlat = route_mode_button.get_theme_stylebox("normal") as StyleBoxFlat
-	route_action_style.bg_color = Color("e7b574")
+	route_action_style.bg_color = Color("e6bc85")
 	route_mode_button.add_theme_color_override("font_color", Color("123441"))
 	route_mode_button.add_theme_color_override("font_hover_color", Color("123441"))
 	route_mode_button.toggle_mode = true
@@ -601,10 +602,10 @@ func _layout_for_size(view_size: Vector2) -> void:
 	cockpit_background.anchor_right = 0.0 if landscape else 1.0
 	cockpit_background.offset_left = 8.0
 	cockpit_background.offset_right = cockpit_width - 8.0 if landscape else -8.0
-	cockpit_background.offset_bottom = 108.0 if landscape else 118.0
+	cockpit_background.offset_bottom = 84.0 if landscape else 93.0
 	cockpit_top.anchor_right = 0.0 if landscape else 1.0
-	cockpit_top.offset_left = 19.0
-	cockpit_top.offset_right = cockpit_width - 19.0 if landscape else -19.0
+	cockpit_top.offset_left = 16.0
+	cockpit_top.offset_right = cockpit_width - 16.0 if landscape else -16.0
 	zoom_buttons.columns = 4 if landscape else 1
 	zoom_buttons.offset_top = 84.0 if landscape else 143.0
 	zoom_buttons.offset_left = -224.0 if landscape else -61.0
@@ -639,8 +640,8 @@ func _layout_for_size(view_size: Vector2) -> void:
 	var game_action_width: float = minf(130.0, maxf(95.0, view_size.x * 0.15))
 	route_mode_button.offset_left = 13.0
 	route_mode_button.offset_right = 13.0 + game_action_width
-	route_mode_button.offset_top = -126.0 if landscape else -196.0
-	route_mode_button.offset_bottom = -76.0 if landscape else -147.0
+	route_mode_button.offset_top = -126.0 if landscape else -125.0
+	route_mode_button.offset_bottom = -76.0 if landscape else -76.0
 	follow_button.offset_left = 24.0 + game_action_width
 	follow_button.offset_right = 24.0 + game_action_width * 2.0
 	follow_button.offset_top = route_mode_button.offset_top
@@ -1148,7 +1149,9 @@ func show_tab(tab: String) -> void:
 		nav_button.modulate = Color.WHITE
 		var active: bool = key == tab
 		var nav_style := StyleBoxFlat.new()
-		nav_style.bg_color = Color("e8b877") if active else Color(0.14, 0.33, 0.39, 0.85)
+		nav_style.bg_color = Color(0.21, 0.37, 0.41, 0.97) if active else Color(0.07, 0.20, 0.25, 0.96)
+		nav_style.border_width_bottom = 3 if active else 0
+		nav_style.border_color = Color("e6bc85")
 		nav_style.corner_radius_top_left = 12
 		nav_style.corner_radius_top_right = 12
 		nav_style.corner_radius_bottom_left = 12
@@ -1156,7 +1159,7 @@ func show_tab(tab: String) -> void:
 		nav_style.content_margin_left = 4
 		nav_style.content_margin_right = 4
 		nav_button.add_theme_stylebox_override("normal", nav_style)
-		nav_button.add_theme_color_override("font_color", Color("173d49") if active else Color("deeff0"))
+		nav_button.add_theme_color_override("font_color", Color("fff0d5") if active else Color("c1d3d1"))
 	if tab != "map":
 		build_tab()
 
